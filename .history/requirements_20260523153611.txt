@@ -1,0 +1,11 @@
+flask
+flask-cors
+python-dotenv
+langchain
+langchain-google-genai
+langgraph
+google-generativeai
+arxiv
+pymupdf
+requests
+ipykernl

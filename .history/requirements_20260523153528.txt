@@ -1,0 +1,10 @@
+flask
+flask-cors
+python-dotenv
+langchain
+langchain-google-genai
+langgraph
+google-generativeai
+arxiv
+pymupdf==1.24.10
+requests==2.32.3

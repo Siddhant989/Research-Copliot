@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}ResearchPilot AI — Research Intelligence Platform{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto px-6 py-12">
+
+  <!-- ── Hero ───────────────────────────────────────────────────────── -->
+  <div class="text-center mb-10">
+    <h1 class="text-4xl font-extrabold text-white mb-3">
+      Autonomous Research Intelligence
+    </h1>
+    <p class="text-gray-400 text-lg max-w-2xl mx-auto">
+      Search arXiv or upload your own PDF — seven AI agents analyze the
+      literature and surface critique, hypotheses, and reproducibility scores.
+    </p>
+  </div>
+
+  <!-- ── Mode Tabs ──────────────────────────────────────────────────── -->
+  <div class="flex gap-2 mb-6">
+    <button id="tab-arxiv"
+      class="tab-btn px-5 py-2 rounded-xl text-sm font-semibold transition-colors
+             bg-indigo-600 text-white">
+      Search arXiv
+    </button>
+    <button id="tab-pdf"
+      class="tab-btn px-5 py-2 rounded-xl text-sm font-semibold transition-colors
+             bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white">
+      Upload PDF
+    </button>
+  </div>
+
+  <!-- ── Panel A: arXiv Search ──────────────────────────────────────── -->
+  <div id="panel-arxiv" class="bg-gray-900 rounded-2xl border border-gray-800 p-6 mb-8">
+    <label class="block text-sm font-medium text-gray-400 mb-2">Research Topic</label>
+    <div class="flex gap-3">
+      <input
+        id="query-input"
+        type="text"
+        placeholder='e.g. "graph neural networks for drug discovery"'
+        class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-3
+               text-white placeholder-gray-600 focus:outline-none
+               focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+      />
+      <button id="run-btn"
+        class="bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700
+               text-white font-semibold px-6 py-3 rounded-xl transition-colors
+               disabled:opacity-50 disabled:cursor-not-allowed">
+        Analyze
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Panel B: PDF Upload ────────────────────────────────────────── -->
+  <div id="panel-pdf" class="hidden bg-gray-900 rounded-2xl border border-gray-800 p-6 mb-8">
+    <label class="block text-sm font-medium text-gray-400 mb-3">Upload a Research Paper (PDF)</label>
+
+    <!-- Drop zone -->
+    <div id="drop-zone"
+      class="border-2 border-dashed border-gray-700 rounded-xl p-10 text-center
+             cursor-pointer hover:border-indigo-500 hover:bg-indigo-950/20
+             transition-colors">
+      <div class="text-4xl mb-3">📄</div>
+      <p class="text-gray-400 text-sm mb-1">Drag & drop a PDF here, or click to browse</p>
+      <p class="text-gray-600 text-xs">Max 15 MB · PDF only</p>
+      <input id="pdf-input" type="file" accept=".pdf" class="hidden" />
+    </div>
+
+    <!-- Selected file display -->
+    <div id="file-chosen" class="hidden mt-4 flex items-center gap-3
+         bg-gray-800 rounded-xl px-4 py-3">
+      <span class="text-indigo-400 text-lg">📎</span>
+      <span id="file-name" class="text-sm text-gray-200 flex-1 truncate"></span>
+      <span id="file-size" class="text-xs text-gray-500"></span>
+      <button id="clear-file" class="text-gray-600 hover:text-red-400 text-xs ml-2">✕</button>
+    </div>
+
+    <button id="upload-btn"
+      class="mt-4 w-full bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700
+             text-white font-semibold py-3 rounded-xl transition-colors
+             disabled:opacity-50 disabled:cursor-not-allowed">
+      Analyze Paper
+    </button>
+  </div>
+
+  <!-- ── Agent Pipeline Status Cards ───────────────────────────────── -->
+  <div id="agent-grid"
+       class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mb-8 hidden">
+    <!-- Injected by main.js -->
+  </div>
+
+  <!-- ── Rich Results Panel ─────────────────────────────────────────── -->
+  <div id="results-panel" class="hidden space-y-6">
+
+    <!-- PDF Paper Meta (only shown in PDF mode) -->
+    <div id="paper-meta-card"
+         class="hidden bg-gray-900 rounded-2xl border border-indigo-900 p-5">
+      <h2 class="text-sm font-semibold text-indigo-400 uppercase tracking-widest mb-3">
+        Uploaded Paper
+      </h2>
+      <p id="meta-title"   class="text-white font-bold text-lg leading-snug mb-1"></p>
+      <p id="meta-authors" class="text-gray-400 text-sm mb-3"></p>
+      <div class="flex flex-wrap gap-3 text-xs text-gray-500">
+        <span id="meta-pages"></span>
+        <span id="meta-words"></span>
+        <span id="meta-code"  class="text-green-500"></span>
+        <span id="meta-data"  class="text-blue-400"></span>
+      </div>
+    </div>
+
+    <!-- Synthesis -->
+    <div class="bg-gray-900 rounded-2xl border border-gray-800 p-6">
+      <h2 class="text-sm font-semibold text-indigo-400 uppercase tracking-widest mb-4">
+        Research Synthesis
+      </h2>
+      <div id="synthesis-body"
+           class="prose prose-invert prose-sm max-w-none text-gray-300
+                  [&_h2]:text-indigo-300 [&_h2]:font-semibold [&_h2]:text-base [&_h2]:mt-4 [&_h2]:mb-2
+                  [&_h3]:text-indigo-300 [&_h3]:font-semibold [&_h3]:text-sm  [&_h3]:mt-3 [&_h3]:mb-1
+                  [&_ul]:list-disc [&_ul]:pl-5 [&_li]:mb-1
+                  [&_strong]:text-white">
+      </div>
+    </div>
+
+    <!-- Papers + Repro Scores -->
+    <div class="bg-gray-900 rounded-2xl border border-gray-800 p-6">
+      <h2 class="text-sm font-semibold text-indigo-400 uppercase tracking-widest mb-4">
+        Papers &amp; Reproducibility Scores
+      </h2>
+      <div id="papers-list" class="space-y-3"></div>
+    </div>
+
+    <!-- Key Findings -->
+    <div class="bg-gray-900 rounded-2xl border border-gray-800 p-6">
+      <h2 class="text-sm font-semibold text-indigo-400 uppercase tracking-widest mb-4">
+        Key Findings
+      </h2>
+      <ul id="findings-list" class="space-y-2 text-sm text-gray-300"></ul>
+    </div>
+
+    <!-- Hypotheses -->
+    <div class="bg-gray-900 rounded-2xl border border-gray-800 p-6">
+      <h2 class="text-sm font-semibold text-indigo-400 uppercase tracking-widest mb-4">
+        Testable Hypotheses
+      </h2>
+      <ol id="hypotheses-list" class="space-y-3 list-decimal list-inside text-sm text-gray-300"></ol>
+    </div>
+
+    <!-- Errors (only shown if non-empty) -->
+    <div id="errors-card" class="hidden bg-red-950 rounded-2xl border border-red-900 p-5">
+      <h2 class="text-sm font-semibold text-red-400 uppercase tracking-widest mb-3">
+        Pipeline Warnings
+      </h2>
+      <ul id="errors-list" class="space-y-1 text-xs text-red-300 list-disc list-inside"></ul>
+    </div>
+
+  </div>
+
+  <!-- ── Knowledge Graph (Phase 4) ──────────────────────────────────── -->
+  <div class="mt-8 bg-gray-900 rounded-2xl border border-gray-800 p-6">
+    <h2 class="text-xl font-semibold text-white mb-2">Knowledge Graph</h2>
+    <p class="text-gray-500 text-sm mb-4">
+      Interactive citation network renders here in Phase 4.
+    </p>
+    <div id="cy"
+         class="w-full rounded-xl bg-gray-950 border border-gray-800
+                flex items-center justify-center text-gray-700 text-sm"
+         style="height: 300px;">
+      Graph will render here
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+{% endblock %}

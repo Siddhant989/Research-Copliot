@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-gray-950">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}ResearchPilot AI{% endblock %}</title>
+
+  <!-- TailwindCSS via CDN — no build step needed for the hackathon -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Cytoscape.js — the graph visualization library (added in Phase 4) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.29.2/cytoscape.min.js"></script>
+
+  <!-- marked.js — converts Markdown → HTML so the synthesis report renders nicely -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <style>
+    /* Custom scrollbar so the dark theme looks polished */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+  </style>
+
+  {% block extra_head %}{% endblock %}
+</head>
+
+<body class="h-full text-gray-100 font-sans antialiased">
+
+  <!-- ── Top Navigation Bar ─────────────────────────────────────────── -->
+  <nav class="fixed top-0 inset-x-0 z-50 bg-gray-900 border-b border-gray-800 px-6 py-3 flex items-center gap-3">
+    <span class="text-indigo-400 text-xl font-bold tracking-tight">ResearchPilot</span>
+    <span class="text-gray-500 text-xl font-light">AI</span>
+    <span class="ml-2 text-xs bg-indigo-900 text-indigo-300 px-2 py-0.5 rounded-full">
+      Hackathon Demo
+    </span>
+  </nav>
+
+  <!-- ── Page Content (pushed below the fixed nav) ─────────────────── -->
+  <main class="pt-14 min-h-full">
+    {% block content %}{% endblock %}
+  </main>
+
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>
