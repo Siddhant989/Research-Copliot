@@ -1,9 +1,14 @@
 """
-app/agents/state.py — The shared "memory" that all LangGraph agents read & write.
+app/agents/state.py — The shared "whiteboard" that all LangGraph agents read & write.
 
-Think of ResearchState as a whiteboard that every agent in the pipeline can see.
-Each agent reads what it needs, does its work, and writes its results back.
-LangGraph passes this dict from node to node automatically.
+Every field here is visible to every agent.  Each agent reads what it needs,
+does its work, and returns a PARTIAL dict with only the fields it changed.
+LangGraph merges that partial dict back into the full state automatically.
+
+Phase 5 adds three fields to support the Critic ↔ Hypothesis feedback loop:
+  hypothesis_iterations — how many times Hypothesis has run (starts at 0)
+  hypothesis_quality    — Evaluator's verdict: "pass" or "retry"
+  evaluator_feedback    — Evaluator's written notes on what to improve
 """
 
 from typing import TypedDict
@@ -25,6 +30,11 @@ class ResearchState(TypedDict):
 
     # ── Hypothesis output ─────────────────────────────────────────────────────
     hypotheses: list         # List of strings, each a testable hypothesis
+
+    # ── Hypothesis feedback loop (Phase 5) ────────────────────────────────────
+    hypothesis_iterations: int  # How many times Hypothesis agent has run (0 = not yet)
+    hypothesis_quality:    str  # Evaluator's verdict: "pass" | "retry"
+    evaluator_feedback:    str  # What Evaluator told Hypothesis to improve
 
     # ── Memory output ─────────────────────────────────────────────────────────
     key_findings: list       # Bullet-point findings distilled from all papers
