@@ -8,11 +8,16 @@
   <!-- TailwindCSS via CDN — no build step needed for the hackathon -->
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- Cytoscape.js — the graph visualization library (added in Phase 4) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.29.2/cytoscape.min.js"></script>
-
-  <!-- marked.js — converts Markdown → HTML so the synthesis report renders nicely -->
+  <!-- marked.js — converts Markdown → HTML so the synthesis renders nicely -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <!-- Chart.js — for repro score bar chart and publication timeline -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+
+  <!-- Prism.js — syntax highlighting for the generated code snippet -->
+  <link  href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
 
   <style>
     /* Custom scrollbar so the dark theme looks polished */
@@ -33,6 +38,25 @@
     <span class="ml-2 text-xs bg-indigo-900 text-indigo-300 px-2 py-0.5 rounded-full">
       Hackathon Demo
     </span>
+
+    <!-- Spacer pushes Demo button to the right -->
+    <div class="flex-1"></div>
+
+    <!--
+      DEMO BUTTON — click this during live presentations.
+      Loads pre-built "Attention Is All You Need" results instantly.
+      No Gemini API key needed.
+    -->
+    <button
+      id="demo-btn"
+      title="Load pre-built demo results for 'Attention Is All You Need' (no API call)"
+      class="flex items-center gap-2 bg-amber-500 hover:bg-amber-400 active:bg-amber-600
+             text-gray-950 font-bold text-sm px-4 py-1.5 rounded-xl
+             transition-colors shadow-lg shadow-amber-900/40
+             disabled:opacity-60 disabled:cursor-not-allowed">
+      <span>▶</span>
+      <span>Run Demo</span>
+    </button>
   </nav>
 
   <!-- ── Page Content (pushed below the fixed nav) ─────────────────── -->

@@ -1,16 +1,11 @@
 """
 app/agents/hypothesis.py — Hypothesis Agent
 
-Role: Generates 5 testable hypotheses from the Critic's identified gaps.
+Role: Turns the gaps found by the Critic into concrete ideas
+      that a real researcher could actually go and test.
 
-Phase 5 upgrade: this agent now runs in two modes:
-  • FIRST RUN  (hypothesis_iterations == 0)
-      Normal generation from the critique alone.
-
-  • RETRY RUN  (hypothesis_iterations > 0, evaluator_feedback is set)
-      The Evaluator rejected the previous batch.  The agent re-reads its
-      own previous output + the evaluator's written feedback, then writes
-      an improved set.  This is the "feedback loop" in action.
+Plain-English tone — like a researcher pitching their next project
+at a team meeting, not writing a grant proposal.
 
 Input state fields:  query, critique, hypothesis_iterations, evaluator_feedback
 Output state fields: hypotheses, hypothesis_iterations
@@ -21,102 +16,97 @@ from app.agents.state import ResearchState
 from app.agents.llm import llm
 
 
-# ── System prompts — one for each mode ────────────────────────────────────────
+FIRST_RUN_PROMPT = """You are a curious researcher who explains ideas as simply as possible.
 
-FIRST_RUN_PROMPT = """You are a creative research scientist who specialises in
-generating novel, testable hypotheses from identified research gaps.
-
-Given a research topic and a critique of current literature, generate exactly
-5 testable hypotheses. Each hypothesis must:
+Based on the gaps in the current literature, write exactly 5 research ideas.
+Each idea must:
   • Start with "H: "
-  • Be a single, specific, falsifiable statement (not a question).
-  • Name a concrete variable, model, dataset, or metric to measure.
-  • Suggest how it could be tested (experiment, comparison, measurement).
-  • Be novel — do not simply restate what existing papers already do.
+  • Be 2–3 sentences long
+  • Sound like you're explaining it to a curious friend who is NOT a scientist
+  • Answer three things naturally: What are you trying? Why does it matter? What would you find out?
+  • Use everyday words — avoid acronyms, metric names, and jargon
+  • Do NOT mention specific model names, dataset names, or percentage numbers
 
-Output ONLY the 5 hypotheses, one per line. No preamble, no numbering.
+Good example (for AI + medicine):
+  H: What if a small AI trained only on medical records could answer doctor questions
+     better than a huge general-purpose AI? Most AI tools today learned from the whole
+     internet — not specifically from medicine. This experiment would show whether
+     focused training beats sheer scale for real-world health tasks.
+
+Bad example:
+  H: Fine-tuning a 7B LLaMA on MIMIC-III will yield 15% F1 gain on ICD-10 tasks.
+  ← jargon-heavy, no plain explanation, unreadable to a first-time reader
+
+Write only the 5 ideas, one per line. No intro, no numbering.
 """
 
-RETRY_PROMPT = """You are a research scientist who must IMPROVE a rejected set
-of hypotheses based on an evaluator's feedback.
+RETRY_PROMPT = """You wrote 5 research ideas but they didn't pass review because they
+were too technical and hard to understand for a first-time reader.
 
-Read the feedback carefully — it tells you exactly what was wrong.
-Then generate 5 NEW hypotheses that directly address the criticism.
+Here's the specific feedback — read it carefully before writing new ideas.
 
-Each hypothesis must:
+Now write 5 BETTER ideas that fix the exact problems mentioned.
+Each idea must still:
   • Start with "H: "
-  • Be a single, specific, falsifiable statement.
-  • Name a concrete variable, model, dataset, or metric.
-  • Suggest how it could be tested.
-  • Be clearly different from and better than the rejected ones.
+  • Be written in plain everyday English — imagine explaining it to a smart friend
+    who has never studied this topic
+  • Be 2–3 sentences: what are you trying, why does it matter, what would you learn
+  • Have NO jargon, acronyms, or technical metric names
 
-Output ONLY the 5 hypotheses, one per line. No preamble, no numbering.
+Don't reuse the rejected ideas. Write fresh ones that address the feedback.
+Write only the 5 ideas, one per line.
 """
 
 
 def _parse_hypotheses(raw: str) -> list:
-    """Extract hypothesis lines from raw LLM output."""
     lines = [l.strip() for l in raw.splitlines() if l.strip()]
-    # Prefer lines that start with the required "H: " prefix
     tagged = [l for l in lines if l.startswith("H: ")]
-    return tagged if tagged else lines   # fallback: keep all non-empty lines
+    return tagged if tagged else lines
 
 
 def hypothesis_node(state: ResearchState) -> dict:
-    """
-    Generate (or re-generate) hypotheses.
-
-    Each time this node runs, it increments hypothesis_iterations so the
-    Evaluator and the graph router can track how many attempts have been made.
-    """
     critique   = state.get("critique", "")
-    iterations = state.get("hypothesis_iterations", 0)   # 0 on first call
+    iterations = state.get("hypothesis_iterations", 0)
     feedback   = state.get("evaluator_feedback", "")
 
     if not critique or critique.startswith("No papers"):
         return {
-            "hypotheses":             ["Insufficient data to generate hypotheses."],
-            "hypothesis_iterations":  iterations + 1,
+            "hypotheses":            ["Not enough information to suggest research ideas."],
+            "hypothesis_iterations": iterations + 1,
             "errors": state.get("errors", []) + ["Hypothesis: skipped — no critique."],
         }
 
     is_retry = iterations > 0 and bool(feedback)
 
     if is_retry:
-        print(f"[Hypothesis] RETRY #{iterations} — incorporating evaluator feedback…")
+        print(f"[Hypothesis] Retry #{iterations} — using evaluator feedback…")
         system_prompt = RETRY_PROMPT
         user_message  = (
             f"Research topic: {state['query']}\n\n"
-            f"Critique of current literature:\n{critique}\n\n"
-            f"━━━ EVALUATOR FEEDBACK (what was wrong with previous hypotheses) ━━━\n"
-            f"{feedback}\n\n"
-            f"━━━ REJECTED HYPOTHESES (do NOT reuse these) ━━━\n"
+            f"What the literature is missing:\n{critique}\n\n"
+            f"WHY your previous ideas were rejected:\n{feedback}\n\n"
+            f"Your rejected ideas (don't reuse these):\n"
             + "\n".join(state.get("hypotheses", []))
         )
     else:
-        print("[Hypothesis] First run — generating hypotheses from critique…")
+        print("[Hypothesis] Generating research ideas…")
         system_prompt = FIRST_RUN_PROMPT
         user_message  = (
             f"Research topic: {state['query']}\n\n"
-            f"Critique of current literature:\n{critique}"
+            f"What the literature is missing:\n{critique}"
         )
 
     try:
-        response = llm.invoke([
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=user_message),
-        ])
+        response   = llm.invoke([SystemMessage(content=system_prompt),
+                                  HumanMessage(content=user_message)])
         hypotheses = _parse_hypotheses(response.content)
     except Exception as e:
-        hypotheses = ["Could not generate hypotheses."]
+        hypotheses = ["Could not generate research ideas."]
         return {
             "hypotheses":            hypotheses,
             "hypothesis_iterations": iterations + 1,
             "errors": state.get("errors", []) + [f"Hypothesis: {e}"],
         }
 
-    print(f"[Hypothesis] Generated {len(hypotheses)} hypotheses (attempt {iterations + 1}).")
-    return {
-        "hypotheses":            hypotheses,
-        "hypothesis_iterations": iterations + 1,   # always increment
-    }
+    print(f"[Hypothesis] {len(hypotheses)} ideas generated (attempt {iterations + 1}).")
+    return {"hypotheses": hypotheses, "hypothesis_iterations": iterations + 1}

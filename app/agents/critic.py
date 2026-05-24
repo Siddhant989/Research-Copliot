@@ -1,12 +1,12 @@
 """
 app/agents/critic.py — Critic Agent
 
-Role: Reads the fetched papers and identifies:
-      • Shared limitations / gaps across all papers
-      • Methodological weaknesses
-      • Datasets or settings that are under-explored
+Role: Reads the fetched papers and surfaces what they're missing —
+      in plain English, not academic-speak.
 
-This critical analysis feeds directly into the Hypothesis Agent.
+Think of this agent as a knowledgeable friend who read all the papers
+and is now telling you honestly: "Here's what these papers don't cover,
+and here's why that matters."
 
 Input state fields:  query, papers
 Output state fields: critique
@@ -17,45 +17,49 @@ from app.agents.state import ResearchState
 from app.agents.llm import llm
 
 
-SYSTEM_PROMPT = """You are a rigorous academic peer reviewer.
-You will receive a research topic and abstracts of several papers on that topic.
+SYSTEM_PROMPT = """You are a sharp, honest research reviewer — like a trusted
+colleague who has read every paper and will tell you straight what's missing.
 
-Your task: write a focused critique (3-5 bullet points) that identifies:
-1. Common limitations or blind spots across the papers.
-2. Methodological weaknesses (e.g. small datasets, lack of baselines, biased evaluation).
-3. Under-explored directions or missing comparisons.
+You'll get a research topic and summaries of several papers on that topic.
 
-Format your response as a bullet list. Be specific and constructive.
-Do NOT summarise what the papers do — focus on what they FAIL to address.
+Your job: write 4-5 bullet points explaining what these papers are NOT doing well.
+Write like you're talking to a smart colleague over coffee — clear, direct, no jargon.
+
+For each bullet point:
+  - Start with a short bold label (e.g. **The big gap they all ignore:**)
+  - Then explain the problem in 2-3 plain sentences
+  - Say WHY it matters in practice
+
+Avoid: words like "methodological", "epistemological", "paradigmatic"
+Use instead: "the way they test it", "how they set it up", "what they skip"
+
+Focus only on what's MISSING or WEAK — don't summarise what the papers do.
 """
 
 
 def _format_papers(papers: list) -> str:
-    """Turn the paper list into a compact string for the prompt."""
     lines = []
     for i, p in enumerate(papers, 1):
         lines.append(
-            f"{i}. [{p['title']}] ({p['published']})\n"
-            f"   Abstract: {p['abstract'][:400]}..."
+            f"{i}. {p['title']} ({p['published']})\n"
+            f"   Summary: {p['abstract'][:400]}..."
         )
     return "\n\n".join(lines)
 
 
 def critic_node(state: ResearchState) -> dict:
-    """Critique the fetched papers and surface weaknesses."""
     papers = state.get("papers", [])
-
     if not papers:
         return {
-            "critique": "No papers were available to critique.",
+            "critique": "No papers were found to review.",
             "errors": state.get("errors", []) + ["Critic: skipped — no papers."],
         }
 
-    print(f"[Critic] Critiquing {len(papers)} papers…")
+    print(f"[Critic] Reviewing {len(papers)} papers…")
 
     user_message = (
         f"Research topic: {state['query']}\n\n"
-        f"Papers:\n{_format_papers(papers)}"
+        f"Papers to review:\n{_format_papers(papers)}"
     )
 
     try:
@@ -65,7 +69,7 @@ def critic_node(state: ResearchState) -> dict:
         ])
         critique = response.content.strip()
     except Exception as e:
-        critique = "Critique could not be generated."
+        critique = "Could not generate a critique."
         return {"critique": critique, "errors": state.get("errors", []) + [f"Critic: {e}"]}
 
     print("[Critic] Done.")

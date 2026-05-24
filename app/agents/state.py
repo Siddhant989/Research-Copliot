@@ -1,49 +1,50 @@
 """
-app/agents/state.py — The shared "whiteboard" that all LangGraph agents read & write.
+app/agents/state.py — The shared whiteboard every agent reads and writes.
 
-Every field here is visible to every agent.  Each agent reads what it needs,
-does its work, and returns a PARTIAL dict with only the fields it changed.
-LangGraph merges that partial dict back into the full state automatically.
-
-Phase 5 adds three fields to support the Critic ↔ Hypothesis feedback loop:
-  hypothesis_iterations — how many times Hypothesis has run (starts at 0)
-  hypothesis_quality    — Evaluator's verdict: "pass" or "retry"
-  evaluator_feedback    — Evaluator's written notes on what to improve
+LangGraph passes this dict from node to node automatically.
+Each agent only returns the fields it changes — LangGraph merges the rest.
 """
 
 from typing import TypedDict
 
 
 class ResearchState(TypedDict):
-    # ── Inputs ────────────────────────────────────────────────────────────────
-    query: str               # Original topic the user typed in the UI
+    # ── Input ─────────────────────────────────────────────────────────────────
+    query: str               # What the user typed
 
-    # ── Planner output ────────────────────────────────────────────────────────
-    refined_query: str       # Planner's improved, search-friendly version of query
+    # ── Planner ───────────────────────────────────────────────────────────────
+    refined_query: str       # Search-optimised version of the query
 
-    # ── Research output ───────────────────────────────────────────────────────
-    papers: list             # List of dicts fetched from arXiv:
-                             # {title, authors, abstract, url, published, categories}
+    # ── Research ──────────────────────────────────────────────────────────────
+    papers: list             # [{title, authors, abstract, url, published, categories}]
 
-    # ── Critic output ─────────────────────────────────────────────────────────
-    critique: str            # Paragraph identifying gaps / weaknesses in the papers
+    # ── Critic ────────────────────────────────────────────────────────────────
+    critique: str            # Plain-English gaps in the literature
 
-    # ── Hypothesis output ─────────────────────────────────────────────────────
-    hypotheses: list         # List of strings, each a testable hypothesis
+    # ── Hypothesis (with feedback loop) ───────────────────────────────────────
+    hypotheses:             list   # ["H: ...", ...]
+    hypothesis_iterations:  int    # how many times Hypothesis has run
+    hypothesis_quality:     str    # "pass" | "retry"
+    evaluator_feedback:     str    # written notes from Evaluator on what to fix
 
-    # ── Hypothesis feedback loop (Phase 5) ────────────────────────────────────
-    hypothesis_iterations: int  # How many times Hypothesis agent has run (0 = not yet)
-    hypothesis_quality:    str  # Evaluator's verdict: "pass" | "retry"
-    evaluator_feedback:    str  # What Evaluator told Hypothesis to improve
+    # ── Memory ────────────────────────────────────────────────────────────────
+    key_findings: list       # ["• ...", ...]
 
-    # ── Memory output ─────────────────────────────────────────────────────────
-    key_findings: list       # Bullet-point findings distilled from all papers
+    # ── Reproducibility Scorer ────────────────────────────────────────────────
+    repro_scores: list       # [{title, score, reasoning, code_mentions, dataset_mentions}]
 
-    # ── Reproducibility Scorer output ─────────────────────────────────────────
-    repro_scores: list       # List of dicts: {title, score (0-10), reasoning}
+    # ── Tech Analyzer (new) ───────────────────────────────────────────────────
+    model_profiles: list     # [{paper, architecture, key_components, parameters,
+                             #   training_data, compute, framework}]
+    code_snippet:   str      # Runnable Python snippet for the core concept
 
-    # ── Synthesizer output ────────────────────────────────────────────────────
-    synthesis: str           # Final executive-summary report
+    # ── Synthesizer — structured per-paper analysis ──────────────────────────
+    methodology: list   # [{paper, approach, how_tested, steps:[...]}]
+    assumptions: list   # [{paper, assumptions:[...]}]
+    weaknesses:  list   # [{paper, weaknesses:[...]}]
 
-    # ── Error tracking ────────────────────────────────────────────────────────
-    errors: list             # Any error messages collected along the way
+    # ── Synthesizer ───────────────────────────────────────────────────────────
+    synthesis: str           # Final plain-English report (Markdown)
+
+    # ── Errors ────────────────────────────────────────────────────────────────
+    errors: list

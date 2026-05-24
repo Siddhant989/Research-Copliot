@@ -1,77 +1,78 @@
 /**
- * main.js — Frontend logic for ResearchPilot AI (Phase 3)
+ * main.js — ResearchPilot AI frontend (all phases combined)
  *
- * Responsibilities:
- *  1. Tab switching between "Search arXiv" and "Upload PDF" modes.
- *  2. Drag-and-drop / click-to-browse PDF file selection.
- *  3. Animated agent status cards during pipeline execution.
- *  4. Rich results rendering (synthesis, papers, findings, hypotheses).
+ * Sections:
+ *  A. Agent definitions
+ *  B. State & DOM refs
+ *  C. Tab switching
+ *  D. PDF file selection
+ *  E. Agent cards
+ *  F. renderResults()  — synthesis, papers, findings, hypotheses, errors
+ *  G. renderCharts()   — Chart.js repro bar + timeline with auto-analysis
+ *  H. renderTech()     — model profiles + code snippet
+ *  I. Pipeline runners — arXiv, PDF, Demo
+ *  J. Event listeners
  */
 
-// ── Agent definitions ─────────────────────────────────────────────────────────
+
+// ════════════════════════════════════════════════════════════════════════════
+// A. AGENT DEFINITIONS
+// ════════════════════════════════════════════════════════════════════════════
+
 const ARXIV_AGENTS = [
   { id: "planner",     label: "Planner",      icon: "🗂️" },
   { id: "research",    label: "Research",      icon: "🔍" },
   { id: "critic",      label: "Critic",        icon: "🧐" },
   { id: "hypothesis",  label: "Hypothesis",    icon: "💡" },
-  { id: "evaluator",   label: "Evaluator",     icon: "🎓" },   // Phase 5
+  { id: "evaluator",   label: "Evaluator",     icon: "🎓" },
   { id: "memory",      label: "Memory",        icon: "🧠" },
   { id: "repro",       label: "Repro Scorer",  icon: "📊" },
+  { id: "tech",        label: "Tech Analyzer", icon: "⚙️" },
   { id: "synthesizer", label: "Synthesizer",   icon: "✨" },
 ];
 
-// PDF mode skips Planner + Research
 const PDF_AGENTS = ARXIV_AGENTS.filter(
   a => !["planner", "research"].includes(a.id)
 );
 
-// ── DOM references ────────────────────────────────────────────────────────────
-const tabArxiv      = document.getElementById("tab-arxiv");
-const tabPdf        = document.getElementById("tab-pdf");
-const panelArxiv    = document.getElementById("panel-arxiv");
-const panelPdf      = document.getElementById("panel-pdf");
 
-const queryInput    = document.getElementById("query-input");
-const runBtn        = document.getElementById("run-btn");
+// ════════════════════════════════════════════════════════════════════════════
+// B. STATE & DOM REFS
+// ════════════════════════════════════════════════════════════════════════════
 
-const dropZone      = document.getElementById("drop-zone");
-const pdfInput      = document.getElementById("pdf-input");
-const fileChosen    = document.getElementById("file-chosen");
-const fileName      = document.getElementById("file-name");
-const fileSize      = document.getElementById("file-size");
-const clearFileBtn  = document.getElementById("clear-file");
-const uploadBtn     = document.getElementById("upload-btn");
-
-const agentGrid     = document.getElementById("agent-grid");
-const resultsPanel  = document.getElementById("results-panel");
-
-// ── State ─────────────────────────────────────────────────────────────────────
-let activeMode  = "arxiv";  // "arxiv" | "pdf"
+let activeMode   = "arxiv";
 let selectedFile = null;
-let cyInstance   = null;    // holds the active Cytoscape instance so we can destroy/rebuild it
+let reproChart   = null;   // holds Chart.js instances so we can destroy & rebuild
+let timelineChart = null;
+
+const queryInput   = document.getElementById("query-input");
+const runBtn       = document.getElementById("run-btn");
+const tabArxiv     = document.getElementById("tab-arxiv");
+const tabPdf       = document.getElementById("tab-pdf");
+const panelArxiv   = document.getElementById("panel-arxiv");
+const panelPdf     = document.getElementById("panel-pdf");
+const dropZone     = document.getElementById("drop-zone");
+const pdfInput     = document.getElementById("pdf-input");
+const fileChosen   = document.getElementById("file-chosen");
+const fileName     = document.getElementById("file-name");
+const fileSize     = document.getElementById("file-size");
+const clearFileBtn = document.getElementById("clear-file");
+const uploadBtn    = document.getElementById("upload-btn");
+const agentGrid    = document.getElementById("agent-grid");
+const resultsPanel = document.getElementById("results-panel");
 
 
 // ════════════════════════════════════════════════════════════════════════════
-// TAB SWITCHING
+// C. TAB SWITCHING
 // ════════════════════════════════════════════════════════════════════════════
 
 function switchTab(mode) {
   activeMode = mode;
-
   const isArxiv = mode === "arxiv";
-
-  // Active tab style
-  tabArxiv.className = `tab-btn px-5 py-2 rounded-xl text-sm font-semibold transition-colors ${
-    isArxiv ? "bg-indigo-600 text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white"
-  }`;
-  tabPdf.className = `tab-btn px-5 py-2 rounded-xl text-sm font-semibold transition-colors ${
-    !isArxiv ? "bg-indigo-600 text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white"
-  }`;
-
-  panelArxiv.classList.toggle("hidden",  !isArxiv);
-  panelPdf.classList.toggle("hidden",     isArxiv);
-
-  // Reset results when switching tabs
+  tabArxiv.className = `tab-btn px-5 py-2 rounded-xl text-sm font-semibold transition-colors ${isArxiv ? "bg-indigo-600 text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white"}`;
+  tabPdf.className   = `tab-btn px-5 py-2 rounded-xl text-sm font-semibold transition-colors ${!isArxiv ? "bg-indigo-600 text-white" : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white"}`;
+  panelArxiv.classList.toggle("hidden", !isArxiv);
+  panelPdf.classList.toggle("hidden",    isArxiv);
   agentGrid.classList.add("hidden");
   resultsPanel.classList.add("hidden");
 }
@@ -81,7 +82,7 @@ tabPdf.addEventListener("click",   () => switchTab("pdf"));
 
 
 // ════════════════════════════════════════════════════════════════════════════
-// PDF FILE SELECTION (drag-and-drop + click-to-browse)
+// D. PDF FILE SELECTION
 // ════════════════════════════════════════════════════════════════════════════
 
 function showFileChosen(file) {
@@ -99,59 +100,40 @@ function clearFile() {
   dropZone.classList.remove("hidden");
 }
 
-// Click the drop zone → open file picker
 dropZone.addEventListener("click", () => pdfInput.click());
-
-// File picker selection
-pdfInput.addEventListener("change", () => {
-  if (pdfInput.files[0]) showFileChosen(pdfInput.files[0]);
-});
-
-// Drag-and-drop
-dropZone.addEventListener("dragover", e => {
-  e.preventDefault();
-  dropZone.classList.add("border-indigo-500", "bg-indigo-950/20");
-});
-dropZone.addEventListener("dragleave", () => {
-  dropZone.classList.remove("border-indigo-500", "bg-indigo-950/20");
-});
+pdfInput.addEventListener("change", () => { if (pdfInput.files[0]) showFileChosen(pdfInput.files[0]); });
+dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("border-indigo-500"); });
+dropZone.addEventListener("dragleave", () => dropZone.classList.remove("border-indigo-500"));
 dropZone.addEventListener("drop", e => {
   e.preventDefault();
-  dropZone.classList.remove("border-indigo-500", "bg-indigo-950/20");
+  dropZone.classList.remove("border-indigo-500");
   const file = e.dataTransfer.files[0];
-  if (file && file.name.toLowerCase().endsWith(".pdf")) {
-    showFileChosen(file);
-  } else {
-    alert("Please drop a PDF file.");
-  }
+  if (file?.name.toLowerCase().endsWith(".pdf")) showFileChosen(file);
+  else alert("Please drop a PDF file.");
 });
-
 clearFileBtn.addEventListener("click", clearFile);
 
 
 // ════════════════════════════════════════════════════════════════════════════
-// AGENT CARDS
+// E. AGENT CARDS
 // ════════════════════════════════════════════════════════════════════════════
 
-const STATE_STYLES = {
+const CARD_STYLES = {
   idle:    "border-gray-700 bg-gray-800 text-gray-500",
   running: "border-indigo-500 bg-indigo-950 text-indigo-300 animate-pulse",
   done:    "border-green-600  bg-green-950  text-green-300",
   error:   "border-red-600   bg-red-950    text-red-300",
-  skipped: "border-gray-800  bg-gray-900   text-gray-600",
 };
-const STATE_LABELS = {
-  idle: "Waiting", running: "Running…", done: "Done", error: "Error", skipped: "Skipped",
-};
+const CARD_LABELS = { idle: "Waiting", running: "Running…", done: "Done", error: "Error" };
 
 function buildCard(agent, state = "idle") {
   const el = document.createElement("div");
   el.id = `card-${agent.id}`;
-  el.className = `rounded-xl border p-4 transition-all duration-300 ${STATE_STYLES[state]}`;
+  el.className = `rounded-xl border p-3 transition-all duration-300 ${CARD_STYLES[state]}`;
   el.innerHTML = `
-    <div class="text-2xl mb-1">${agent.icon}</div>
-    <div class="font-semibold text-sm">${agent.label}</div>
-    <div class="text-xs mt-1 opacity-70">${STATE_LABELS[state]}</div>
+    <div class="text-xl mb-1">${agent.icon}</div>
+    <div class="font-semibold text-xs">${agent.label}</div>
+    <div class="text-[10px] mt-1 opacity-70 card-status">${CARD_LABELS[state]}</div>
   `;
   return el;
 }
@@ -159,121 +141,115 @@ function buildCard(agent, state = "idle") {
 function setCardState(agentId, state) {
   const card = document.getElementById(`card-${agentId}`);
   if (!card) return;
-  card.className = `rounded-xl border p-4 transition-all duration-300 ${STATE_STYLES[state]}`;
-  card.querySelector(".text-xs").textContent = STATE_LABELS[state];
+  card.className = `rounded-xl border p-3 transition-all duration-300 ${CARD_STYLES[state]}`;
+  card.querySelector(".card-status").textContent = CARD_LABELS[state];
 }
 
 async function animateCards(agents) {
   agentGrid.innerHTML = "";
   agents.forEach(a => agentGrid.appendChild(buildCard(a, "idle")));
   agentGrid.classList.remove("hidden");
-
   for (const a of agents) {
     setCardState(a.id, "running");
-    await new Promise(r => setTimeout(r, 380));
+    await new Promise(r => setTimeout(r, 320));
   }
 }
 
 
 // ════════════════════════════════════════════════════════════════════════════
-// RICH RESULTS RENDERING
+// F. RENDER RESULTS (synthesis, papers, findings, hypotheses, errors)
 // ════════════════════════════════════════════════════════════════════════════
 
-/** Reproducibility score → colour class */
-function scoreColor(n) {
+function scoreColorClass(n) {
   if (n >= 8) return "bg-green-700 text-green-100";
   if (n >= 5) return "bg-yellow-700 text-yellow-100";
   return "bg-red-800 text-red-100";
 }
 
 function renderResults(data) {
-  // ── Synthesis (Markdown → HTML via marked.js) ──────────────────────
-  const synthesisEl = document.getElementById("synthesis-body");
-  synthesisEl.innerHTML = marked.parse(data.synthesis || "_No synthesis generated._");
-
-  // ── PDF paper meta card ────────────────────────────────────────────
+  // PDF meta card
   const metaCard = document.getElementById("paper-meta-card");
   if (data.mode === "pdf" && data.paper_meta) {
     const m = data.paper_meta;
     document.getElementById("meta-title").textContent   = m.title;
-    document.getElementById("meta-authors").textContent = Array.isArray(m.authors)
-      ? m.authors.join(", ") : m.authors;
-    document.getElementById("meta-pages").textContent =
-      `📄 ${m.page_count} pages`;
-    document.getElementById("meta-words").textContent =
-      `✏️ ~${m.word_count.toLocaleString()} words`;
-    document.getElementById("meta-code").textContent =
-      m.code_mentions.length ? `💻 Code signals: ${m.code_mentions.length}` : "";
-    document.getElementById("meta-data").textContent =
-      m.dataset_mentions.length ? `🗂 Datasets: ${m.dataset_mentions.length}` : "";
+    document.getElementById("meta-authors").textContent = Array.isArray(m.authors) ? m.authors.join(", ") : m.authors;
+    document.getElementById("meta-pages").textContent   = `📄 ${m.page_count} pages`;
+    document.getElementById("meta-words").textContent   = `✏️ ~${m.word_count?.toLocaleString()} words`;
+    document.getElementById("meta-code").textContent    = m.code_mentions?.length ? `💻 ${m.code_mentions.length} code signal(s)` : "";
+    document.getElementById("meta-data").textContent    = m.dataset_mentions?.length ? `🗂 ${m.dataset_mentions.length} dataset(s)` : "";
     metaCard.classList.remove("hidden");
   } else {
     metaCard.classList.add("hidden");
   }
 
-  // ── Papers + Repro Scores ──────────────────────────────────────────
-  const papersList = document.getElementById("papers-list");
-  papersList.innerHTML = "";
+  // Synthesis — Markdown → HTML
+  document.getElementById("synthesis-body").innerHTML =
+    marked.parse(data.synthesis || "_No summary was generated._");
 
-  // Build a quick title → score lookup
+  // Papers + scores
   const scoreMap = {};
   (data.repro_scores || []).forEach(s => { scoreMap[s.title] = s; });
-
+  const papersList = document.getElementById("papers-list");
+  papersList.innerHTML = "";
   (data.papers || []).forEach(p => {
-    const scoreObj = scoreMap[p.title] || {};
-    const score    = scoreObj.score ?? "?";
-    const reason   = scoreObj.reasoning || "";
-
+    const s = scoreMap[p.title] || {};
+    const score = s.score ?? "?";
     const card = document.createElement("div");
     card.className = "bg-gray-800 rounded-xl p-4 flex gap-4 items-start";
     card.innerHTML = `
-      <div class="flex-shrink-0 w-12 h-12 rounded-xl ${scoreColor(score)}
+      <div class="flex-shrink-0 w-12 h-12 rounded-xl ${scoreColorClass(score)}
                   flex flex-col items-center justify-center">
-        <span class="text-xl font-bold leading-none">${score}</span>
-        <span class="text-[9px] opacity-70">/ 10</span>
+        <span class="text-lg font-bold leading-none">${score}</span>
+        <span class="text-[9px] opacity-70">/10</span>
       </div>
       <div class="flex-1 min-w-0">
-        <p class="text-white font-semibold text-sm leading-snug mb-1">
-          ${p.url
-            ? `<a href="${p.url}" target="_blank" rel="noopener"
-                  class="hover:text-indigo-300 transition-colors">${p.title}</a>`
-            : p.title}
+        <p class="text-white font-semibold text-sm leading-snug mb-0.5">
+          ${p.url ? `<a href="${p.url}" target="_blank" class="hover:text-indigo-300 transition-colors">${p.title}</a>` : p.title}
         </p>
         <p class="text-gray-500 text-xs mb-1">
           ${Array.isArray(p.authors) ? p.authors.join(", ") : (p.authors || "")}
           ${p.published ? " · " + p.published : ""}
         </p>
-        ${reason ? `<p class="text-gray-400 text-xs italic">${reason}</p>` : ""}
-      </div>
-    `;
+        ${s.reasoning ? `<p class="text-gray-400 text-xs italic">${s.reasoning}</p>` : ""}
+      </div>`;
     papersList.appendChild(card);
   });
 
-  // ── Key Findings ───────────────────────────────────────────────────
+  // Key findings
   const findingsList = document.getElementById("findings-list");
   findingsList.innerHTML = "";
   (data.key_findings || []).forEach(f => {
     const li = document.createElement("li");
     li.className = "flex gap-2";
-    li.innerHTML = `<span class="text-indigo-400 mt-0.5">▸</span><span>${f}</span>`;
+    li.innerHTML = `<span class="text-indigo-400 mt-0.5 flex-shrink-0">▸</span><span>${f.replace(/^•\s*/, "")}</span>`;
     findingsList.appendChild(li);
   });
 
-  // ── Hypotheses ─────────────────────────────────────────────────────
-  const hypothesesList = document.getElementById("hypotheses-list");
-  hypothesesList.innerHTML = "";
+  // Hypotheses
+  const hypoList = document.getElementById("hypotheses-list");
+  hypoList.innerHTML = "";
   (data.hypotheses || []).forEach((h, i) => {
     const li = document.createElement("li");
     li.className = "flex gap-3";
     li.innerHTML = `
       <span class="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-900 text-indigo-300
-                   text-xs flex items-center justify-center font-bold">${i + 1}</span>
-      <span class="flex-1">${h.replace(/^H:\s*/i, "")}</span>
-    `;
-    hypothesesList.appendChild(li);
+                   text-xs flex items-center justify-center font-bold mt-0.5">${i + 1}</span>
+      <span class="flex-1">${h.replace(/^H:\s*/i, "")}</span>`;
+    hypoList.appendChild(li);
   });
 
-  // ── Errors / Warnings ──────────────────────────────────────────────
+  // Evaluator feedback badge
+  const evalCard = document.getElementById("card-evaluator");
+  if (evalCard && (data.hypothesis_iterations ?? 1) > 1) {
+    if (!evalCard.querySelector(".loop-badge")) {
+      const badge = document.createElement("div");
+      badge.className = "loop-badge mt-1 text-[9px] bg-indigo-800 text-indigo-200 rounded px-1.5 py-0.5 inline-block";
+      badge.textContent = `Refined ${data.hypothesis_iterations - 1}×`;
+      evalCard.appendChild(badge);
+    }
+  }
+
+  // Errors
   const errorsCard = document.getElementById("errors-card");
   const errorsList = document.getElementById("errors-list");
   const errs = data.errors || [];
@@ -284,250 +260,340 @@ function renderResults(data) {
     errorsCard.classList.add("hidden");
   }
 
-  // ── Phase 5: Feedback loop badge ──────────────────────────────────────
-  // If hypotheses were refined more than once, update the Evaluator agent
-  // card to show how many loop iterations happened.
-  const iterations = data.hypothesis_iterations ?? 1;
-  const evalCard   = document.getElementById("card-evaluator");
-  if (evalCard && iterations > 1) {
-    // Add a small "Refined Nx" tag under the card label
-    const existingBadge = evalCard.querySelector(".loop-badge");
-    if (!existingBadge) {
-      const badge = document.createElement("div");
-      badge.className =
-        "loop-badge mt-1 text-[10px] bg-indigo-800 text-indigo-200 " +
-        "rounded px-1.5 py-0.5 inline-block";
-      badge.textContent = `Refined ${iterations - 1}×`;
-      evalCard.appendChild(badge);
-    }
-  }
-
-  // Show the evaluator feedback in a collapsed detail under Hypotheses
-  if (data.evaluator_feedback) {
-    const hList = document.getElementById("hypotheses-list");
-    if (hList) {
-      const note = document.createElement("p");
-      note.className = "mt-3 text-xs text-gray-500 italic border-t border-gray-800 pt-3";
-      note.textContent =
-        `Evaluator feedback (iteration ${iterations - 1}): ${data.evaluator_feedback}`;
-      hList.after(note);
-    }
-  }
-
   resultsPanel.classList.remove("hidden");
-  resultsPanel.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 
 // ════════════════════════════════════════════════════════════════════════════
-// KNOWLEDGE GRAPH  (Cytoscape.js)
+// G. CHARTS  (Chart.js — no extra API calls)
 // ════════════════════════════════════════════════════════════════════════════
 
 /**
- * renderGraph(graphData)
- *
- * graphData comes from the backend's `graph` key:
- *   { nodes: [...], edges: [...] }
- *
- * HOW IT WORKS (beginner walkthrough):
- *  1. We pass nodes + edges to cytoscape().
- *  2. We tell it HOW to draw each type:
- *       paper nodes  → big circles, colour = repro score
- *       topic nodes  → small indigo diamonds
- *       edges        → thin grey lines
- *  3. The `cose` layout is a physics simulator — it pushes nodes apart
- *     so nothing overlaps, and pulls connected nodes closer together.
- *     Papers that share a topic will naturally cluster near each other.
- *  4. We attach a click listener: tap a paper circle → details card appears below.
+ * Chart.js dark-mode defaults applied to every chart.
+ * Chart.defaults lets us set these once instead of repeating in every config.
  */
-function renderGraph(graphData) {
-  const graphSection = document.getElementById("graph-section");
-  const tooltip      = document.getElementById("node-tooltip");
+Chart.defaults.color          = "#94a3b8";  // slate-400
+Chart.defaults.borderColor    = "#1e293b";  // slate-800
+Chart.defaults.backgroundColor = "#1e293b";
 
-  // If there are no nodes (e.g. empty pipeline result), hide the section
-  if (!graphData || !graphData.nodes || graphData.nodes.length === 0) {
-    graphSection.classList.add("hidden");
-    return;
-  }
+function scoreToColor(n, alpha = 1) {
+  if (n >= 8) return `rgba(34,197,94,${alpha})`;   // green-500
+  if (n >= 5) return `rgba(234,179,8,${alpha})`;   // yellow-500
+  return `rgba(239,68,68,${alpha})`;                // red-500
+}
 
-  graphSection.classList.remove("hidden");
-  tooltip.classList.add("hidden");
+function renderCharts(data) {
+  const scores = data.repro_scores || [];
+  const papers = data.papers || [];
 
-  // Destroy the previous Cytoscape instance before building a new one.
-  // (Without this, a second search would stack two canvases on top of each other.)
-  if (cyInstance) {
-    cyInstance.destroy();
-    cyInstance = null;
-  }
+  // ── Chart 1: Reproducibility Score (horizontal bar) ───────────────────
+  const reproCtx = document.getElementById("chart-repro");
+  if (reproChart) reproChart.destroy();
 
-  // ── Build the Cytoscape instance ────────────────────────────────────────
-  cyInstance = cytoscape({
-    container: document.getElementById("cy"),
+  if (scores.length) {
+    const labels = scores.map(s => s.title.length > 22 ? s.title.slice(0, 22) + "…" : s.title);
+    const values = scores.map(s => s.score ?? 0);
+    const colors = values.map(v => scoreToColor(v, 0.85));
 
-    // All nodes and edges combined into one array
-    elements: [...graphData.nodes, ...graphData.edges],
-
-    // ── Visual style rules ─────────────────────────────────────────────
-    style: [
-      // ── Paper nodes: large circles ───────────────────────────────────
-      {
-        selector: "node[type='paper']",
-        style: {
-          "background-color": "data(color)",   // green / yellow / red from backend
-          "label":            "data(label)",   // short title
-          "width":  80,
-          "height": 80,
-          "color":            "#e2e8f0",       // label text colour
-          "font-size":        "9px",
-          "text-valign":      "bottom",        // label sits below the circle
-          "text-halign":      "center",
-          "text-margin-y":    "8px",
-          "text-wrap":        "wrap",
-          "text-max-width":   "90px",
-          "border-width":     2,
-          "border-color":     "#1e293b",
+    reproChart = new Chart(reproCtx, {
+      type: "bar",
+      data: {
+        labels,
+        datasets: [{
+          label: "Repro Score",
+          data:  values,
+          backgroundColor: colors,
+          borderRadius: 6,
+          borderSkipped: false,
+        }],
+      },
+      options: {
+        indexAxis: "y",        // horizontal bars
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: ctx => ` ${ctx.raw}/10 — ${scores[ctx.dataIndex]?.reasoning || ""}`,
+            },
+          },
+        },
+        scales: {
+          x: { min: 0, max: 10, ticks: { stepSize: 2 }, grid: { color: "#1e293b" } },
+          y: { grid: { display: false }, ticks: { font: { size: 10 } } },
         },
       },
+    });
 
-      // ── Topic nodes: small indigo diamonds ───────────────────────────
-      {
-        selector: "node[type='topic']",
-        style: {
-          "background-color": "data(color)",   // always indigo
-          "label":            "data(label)",   // e.g. "Machine Learning"
-          "shape":            "diamond",
-          "width":  50,
-          "height": 50,
-          "color":            "#a5b4fc",
-          "font-size":        "8px",
-          "text-valign":      "bottom",
-          "text-halign":      "center",
-          "text-margin-y":    "8px",
-          "border-width":     1,
-          "border-color":     "#312e81",
-        },
-      },
+    // Auto-analysis text — narrative, not just stats
+    const avg    = (values.reduce((a, b) => a + b, 0) / values.length).toFixed(1);
+    const best   = scores.reduce((a, b) => (a.score ?? 0) >= (b.score ?? 0) ? a : b);
+    const worst  = scores.reduce((a, b) => (a.score ?? 0) <= (b.score ?? 0) ? a : b);
+    const lowCount = values.filter(v => v < 5).length;
 
-      // ── Edges: thin grey lines ────────────────────────────────────────
-      {
-        selector: "edge",
-        style: {
-          "width":       1.5,
-          "line-color":  "#334155",
-          "curve-style": "bezier",
-          "opacity":     0.65,
-        },
-      },
-
-      // ── Highlighted state when a paper node is selected ──────────────
-      {
-        selector: "node[type='paper']:selected",
-        style: {
-          "border-width": 3,
-          "border-color": "#818cf8",   // indigo glow
-        },
-      },
-
-      // ── Dim non-neighbour nodes when one node is selected ─────────────
-      {
-        selector: "node.dimmed",
-        style: { "opacity": 0.25 },
-      },
-      {
-        selector: "edge.dimmed",
-        style: { "opacity": 0.1 },
-      },
-    ],
-
-    // ── Layout: COSE (physics-based spring embedder) ───────────────────
-    // Think of each node as a balloon and each edge as a rubber band.
-    // The algorithm runs hundreds of physics steps until everything settles.
-    layout: {
-      name:              "cose",
-      animate:           true,
-      animationDuration: 700,
-      fit:               true,
-      padding:           45,
-      // How strongly nodes repel each other (higher = more spread out)
-      nodeRepulsion:     500000,
-      // How long each "rubber band" edge should ideally be
-      idealEdgeLength:   130,
-      // Stops nodes from overlapping
-      nodeOverlap:       20,
-      // Extra space between disconnected groups of nodes
-      componentSpacing:  100,
-      // Gentle gravity pulls everything toward the centre
-      gravity:           50,
-      // More iterations = better layout (slower)
-      numIter:           1000,
-    },
-  });
-
-  // ── Click a paper node → show details card ────────────────────────────
-  cyInstance.on("tap", "node[type='paper']", function (evt) {
-    const d = evt.target.data();
-
-    document.getElementById("tooltip-title").textContent =
-      d.full_title || d.label;
-
-    document.getElementById("tooltip-authors").textContent =
-      Array.isArray(d.authors) ? d.authors.join(", ") : (d.authors || "");
-
-    document.getElementById("tooltip-score").textContent = d.score ?? "?";
-    document.getElementById("tooltip-date").textContent  = d.published || "";
-
-    const linkEl = document.getElementById("tooltip-link");
-    if (d.url) {
-      linkEl.href = d.url;
-      linkEl.classList.remove("hidden");
+    let reproAnalysis;
+    if (values.length < 2) {
+      reproAnalysis = "Not enough papers to compare — check the score badge on the paper card above.";
+    } else if (parseFloat(avg) >= 7.5) {
+      reproAnalysis =
+        `This field is doing well on openness — average ${avg}/10 means most papers share their code and data. ` +
+        `"${best.title.slice(0, 38)}…" (${best.score}/10) is the gold standard here: you can verify its claims yourself. ` +
+        (best.score === worst.score
+          ? "Scores are consistent — all papers are roughly equally open."
+          : `"${worst.title.slice(0, 38)}…" (${worst.score}/10) is the one to double-check before building on it — ` +
+            `it may be harder to reproduce than the others.`);
+    } else if (parseFloat(avg) >= 5) {
+      reproAnalysis =
+        `Mixed picture — average ${avg}/10. Some papers share everything, others share very little. ` +
+        (lowCount > 0
+          ? `${lowCount} paper${lowCount > 1 ? "s" : ""} score below 5, which usually means no public code or dataset — ` +
+            `you'd have to re-implement from scratch. `
+          : "") +
+        `Before using these as baselines, confirm "${worst.title.slice(0, 38)}…" (${worst.score}/10) ` +
+        `has what you actually need.`;
     } else {
-      linkEl.classList.add("hidden");
+      reproAnalysis =
+        `Reproducibility is a real concern here — average ${avg}/10 means most papers don't share ` +
+        `enough for independent verification. Treat their benchmark numbers as directional, not definitive. ` +
+        `"${best.title.slice(0, 38)}…" at ${best.score}/10 is the most open of the bunch — start there.`;
     }
+    document.getElementById("chart-repro-analysis").textContent = reproAnalysis;
+  }
 
-    tooltip.classList.remove("hidden");
+  // ── Chart 2: Publication Timeline (scatter) ───────────────────────────
+  const timeCtx = document.getElementById("chart-timeline");
+  if (timelineChart) timelineChart.destroy();
 
-    // Dim everything except this node and its direct neighbours
-    const neighbourhood = evt.target.closedNeighborhood();
-    cyInstance.elements().addClass("dimmed");
-    neighbourhood.removeClass("dimmed");
-  });
+  const paperPoints = papers
+    .filter(p => p.published)
+    .map(p => {
+      const scoreObj = (data.repro_scores || []).find(s => s.title === p.title);
+      return {
+        x: new Date(p.published).getFullYear(),
+        y: scoreObj?.score ?? 5,
+        label: p.title,
+      };
+    });
 
-  // Tap on empty background → clear selection + dimming
-  cyInstance.on("tap", function (evt) {
-    if (evt.target === cyInstance) {
-      tooltip.classList.add("hidden");
-      cyInstance.elements().removeClass("dimmed");
+  if (paperPoints.length) {
+    timelineChart = new Chart(timeCtx, {
+      type: "scatter",
+      data: {
+        datasets: [{
+          label: "Papers",
+          data:  paperPoints,
+          backgroundColor: paperPoints.map(pt => scoreToColor(pt.y, 0.8)),
+          pointRadius: 10,
+          pointHoverRadius: 13,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: ctx => {
+                const pt = paperPoints[ctx.dataIndex];
+                return ` ${pt.label.slice(0, 45)} — ${pt.y}/10`;
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            type: "linear",
+            title: { display: true, text: "Year Published", color: "#64748b" },
+            ticks: { stepSize: 1, callback: v => v.toString() },
+            grid: { color: "#1e293b" },
+          },
+          y: {
+            title: { display: true, text: "Repro Score", color: "#64748b" },
+            min: 0, max: 10,
+            grid: { color: "#1e293b" },
+          },
+        },
+      },
+    });
+
+    // Auto-analysis — narrative trend description
+    const years   = paperPoints.map(p => p.x);
+    const spanYrs = Math.max(...years) - Math.min(...years);
+    const minYear = Math.min(...years);
+    const maxYear = Math.max(...years);
+
+    let timeAnalysis;
+    if (paperPoints.length < 2) {
+      timeAnalysis = "Not present — only one paper to plot, so there's no trend to show.";
+    } else if (spanYrs === 0) {
+      timeAnalysis = "Not present — all papers were published in the same year, so the chart can't show a trend over time.";
+    } else if (spanYrs < 3) {
+      const minScore = Math.min(...paperPoints.map(p => p.y));
+      const maxScore = Math.max(...paperPoints.map(p => p.y));
+      timeAnalysis =
+        `Papers are clustered within a ${spanYrs}-year window (${minYear}–${maxYear}) — ` +
+        `too short a gap to draw a meaningful trend. Scores range from ${minScore} to ${maxScore}/10 across this period.`;
+    } else {
+      const midYear = minYear + Math.floor(spanYrs / 2);
+      const early   = paperPoints.filter(p => p.x <= midYear);
+      const late    = paperPoints.filter(p => p.x > midYear);
+      const earlyAvg = early.length ? (early.reduce((s, p) => s + p.y, 0) / early.length).toFixed(1) : null;
+      const lateAvg  = late.length  ? (late.reduce((s, p)  => s + p.y, 0) / late.length).toFixed(1)  : null;
+
+      if (earlyAvg && lateAvg) {
+        if (parseFloat(lateAvg) > parseFloat(earlyAvg) + 0.5) {
+          timeAnalysis =
+            `Reproducibility is improving — earlier papers (${minYear}–${midYear}) averaged ${earlyAvg}/10, ` +
+            `while more recent ones (${midYear + 1}–${maxYear}) average ${lateAvg}/10. ` +
+            `The field is getting better at sharing code and data as time goes on.`;
+        } else if (parseFloat(earlyAvg) > parseFloat(lateAvg) + 0.5) {
+          timeAnalysis =
+            `Older papers are actually more reproducible than the newer ones here — ` +
+            `early work (${minYear}–${midYear}) averaged ${earlyAvg}/10 vs ${lateAvg}/10 for recent papers. ` +
+            `This can happen when a field moves quickly and teams prioritise getting results out over sharing everything.`;
+        } else {
+          timeAnalysis =
+            `Reproducibility has stayed roughly flat over ${spanYrs} years (${minYear}–${maxYear}) — ` +
+            `early papers averaged ${earlyAvg}/10 and recent ones ${lateAvg}/10. ` +
+            `There's no clear trend toward more or less openness over time in this area.`;
+        }
+      } else {
+        timeAnalysis = `Papers span ${spanYrs} years (${minYear}–${maxYear}). Hover over each dot to see a paper's title and score.`;
+      }
     }
-  });
-
-  // ── Fit / Reset zoom buttons ──────────────────────────────────────────
-  // Re-attach listeners every time we rebuild the graph so they reference
-  // the current cyInstance (old buttons point to the previous destroyed one).
-  const fitBtn   = document.getElementById("graph-fit-btn");
-  const resetBtn = document.getElementById("graph-reset-btn");
-
-  // Clone = removes old listener without needing removeEventListener bookkeeping
-  fitBtn.replaceWith(fitBtn.cloneNode(true));
-  resetBtn.replaceWith(resetBtn.cloneNode(true));
-
-  document.getElementById("graph-fit-btn").addEventListener("click", () => {
-    cyInstance.fit(45);
-  });
-  document.getElementById("graph-reset-btn").addEventListener("click", () => {
-    cyInstance.zoom(1);
-    cyInstance.center();
-    cyInstance.elements().removeClass("dimmed");
-    tooltip.classList.add("hidden");
-  });
-
-  // Scroll graph into view smoothly
-  graphSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.getElementById("chart-timeline-analysis").textContent = timeAnalysis;
+  }
 }
 
 
 // ════════════════════════════════════════════════════════════════════════════
-// PIPELINE RUNNERS
+// H. RENDER TECH PROFILES + CODE SNIPPET
 // ════════════════════════════════════════════════════════════════════════════
+
+const PROFILE_FIELDS = [
+  { key: "architecture",  label: "Architecture",    icon: "🏗️" },
+  { key: "key_components",label: "Key components",  icon: "🔩" },
+  { key: "parameters",   label: "Model size",       icon: "📐" },
+  { key: "training_data",label: "Trained on",       icon: "📚" },
+  { key: "compute",      label: "Compute needed",   icon: "🖥️" },
+  { key: "framework",    label: "Framework",        icon: "🛠️" },
+];
+
+function renderTech(data) {
+  // ── Model profiles ────────────────────────────────────────────────────
+  const profilesEl = document.getElementById("tech-profiles");
+  profilesEl.innerHTML = "";
+  (data.model_profiles || []).forEach(prof => {
+    const card = document.createElement("div");
+    card.className = "bg-gray-800 rounded-xl p-4";
+    const rows = PROFILE_FIELDS.map(f => {
+      let val = prof[f.key];
+      if (Array.isArray(val)) val = val.join(", ");
+      if (!val || val === "Not specified" || val === "N/A") return "";
+      return `
+        <div class="flex gap-2 text-xs">
+          <span class="text-gray-500 w-28 flex-shrink-0">${f.icon} ${f.label}</span>
+          <span class="text-gray-200">${val}</span>
+        </div>`;
+    }).join("");
+
+    card.innerHTML = `
+      <p class="text-white font-semibold text-sm mb-3">${prof.paper || "Unknown paper"}</p>
+      <div class="space-y-2">${rows}</div>`;
+    profilesEl.appendChild(card);
+  });
+
+  // ── Code snippet ──────────────────────────────────────────────────────
+  const codeContent = document.getElementById("code-content");
+  const snippet     = (data.code_snippet || "# No code snippet was generated.").trim();
+  codeContent.textContent = snippet;
+
+  // Re-run Prism so it syntax-highlights the new content
+  if (window.Prism) Prism.highlightElement(codeContent);
+
+  // Copy button
+  document.getElementById("copy-code-btn").onclick = () => {
+    navigator.clipboard.writeText(snippet).then(() => {
+      const btn = document.getElementById("copy-code-btn");
+      btn.textContent = "Copied!";
+      setTimeout(() => { btn.textContent = "Copy code"; }, 2000);
+    });
+  };
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// I. RENDER METHODOLOGY, ASSUMPTIONS, WEAKNESSES
+// ════════════════════════════════════════════════════════════════════════════
+
+function renderAnalysis(data) {
+
+  // ── Methodology ──────────────────────────────────────────────────────────
+  const methodEl = document.getElementById("methodology-list");
+  methodEl.innerHTML = "";
+  (data.methodology || []).forEach(m => {
+    const stepsHtml = (m.steps || []).length
+      ? `<ol class="list-decimal list-inside space-y-1 mt-2 text-gray-400 text-xs">
+           ${m.steps.map(s => `<li>${s}</li>`).join("")}
+         </ol>`
+      : "";
+    const card = document.createElement("div");
+    card.className = "bg-gray-800 rounded-xl p-4";
+    card.innerHTML = `
+      <p class="text-white font-semibold text-sm mb-2">${m.paper || "Unknown paper"}</p>
+      <div class="space-y-1 text-xs">
+        ${m.approach   ? `<p><span class="text-indigo-400 font-medium">Approach: </span><span class="text-gray-300">${m.approach}</span></p>` : ""}
+        ${m.how_tested ? `<p><span class="text-indigo-400 font-medium">How tested: </span><span class="text-gray-300">${m.how_tested}</span></p>` : ""}
+      </div>
+      ${stepsHtml}`;
+    methodEl.appendChild(card);
+  });
+
+  // ── Assumptions ──────────────────────────────────────────────────────────
+  const assumpEl = document.getElementById("assumptions-list");
+  assumpEl.innerHTML = "";
+  (data.assumptions || []).forEach(a => {
+    const card = document.createElement("div");
+    card.className = "bg-gray-800 rounded-xl p-4";
+    const rows = (a.assumptions || []).map(txt =>
+      `<li class="flex gap-2"><span class="text-amber-400 flex-shrink-0 mt-0.5">⚠</span><span>${txt}</span></li>`
+    ).join("");
+    card.innerHTML = `
+      <p class="text-white font-semibold text-sm mb-2">${a.paper || "Unknown paper"}</p>
+      <ul class="space-y-1.5 text-xs text-gray-300">${rows}</ul>`;
+    assumpEl.appendChild(card);
+  });
+
+  // ── Weaknesses ───────────────────────────────────────────────────────────
+  const weakEl = document.getElementById("weaknesses-list");
+  weakEl.innerHTML = "";
+  (data.weaknesses || []).forEach(w => {
+    const card = document.createElement("div");
+    card.className = "bg-gray-800 rounded-xl p-4";
+    const rows = (w.weaknesses || []).map(txt =>
+      `<li class="flex gap-2"><span class="text-red-400 flex-shrink-0 mt-0.5">✕</span><span>${txt}</span></li>`
+    ).join("");
+    card.innerHTML = `
+      <p class="text-white font-semibold text-sm mb-2">${w.paper || "Unknown paper"}</p>
+      <ul class="space-y-1.5 text-xs text-gray-300">${rows}</ul>`;
+    weakEl.appendChild(card);
+  });
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// K. PIPELINE RUNNERS
+// ════════════════════════════════════════════════════════════════════════════
+
+function _onSuccess(data, agents) {
+  agents.forEach(a => setCardState(a.id, "done"));
+  renderResults(data);
+  renderCharts(data);
+  renderTech(data);
+  renderAnalysis(data);
+}
 
 async function runArxivPipeline() {
   const query = queryInput.value.trim();
@@ -536,7 +602,6 @@ async function runArxivPipeline() {
   runBtn.disabled = true;
   runBtn.textContent = "Running…";
   resultsPanel.classList.add("hidden");
-
   await animateCards(ARXIV_AGENTS);
 
   try {
@@ -546,12 +611,8 @@ async function runArxivPipeline() {
       body: JSON.stringify({ query }),
     });
     const data = await res.json();
-
     if (data.status === "error") throw new Error(data.error);
-
-    ARXIV_AGENTS.forEach(a => setCardState(a.id, "done"));
-    renderResults(data);
-    renderGraph(data.graph);
+    _onSuccess(data, ARXIV_AGENTS);
   } catch (err) {
     ARXIV_AGENTS.forEach(a => setCardState(a.id, "error"));
     alert(`Pipeline error: ${err.message}`);
@@ -559,6 +620,7 @@ async function runArxivPipeline() {
 
   runBtn.disabled = false;
   runBtn.textContent = "Analyze";
+  resultsPanel.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 
@@ -568,23 +630,15 @@ async function runPdfPipeline() {
   uploadBtn.disabled = true;
   uploadBtn.textContent = "Analyzing…";
   resultsPanel.classList.add("hidden");
-
   await animateCards(PDF_AGENTS);
 
   try {
     const form = new FormData();
     form.append("file", selectedFile);
-
     const res  = await fetch("/api/upload", { method: "POST", body: form });
     const data = await res.json();
-
-    if (data.status === "error" || data.error) {
-      throw new Error(data.error || "Unknown error");
-    }
-
-    PDF_AGENTS.forEach(a => setCardState(a.id, "done"));
-    renderResults(data);
-    renderGraph(data.graph);
+    if (data.status === "error" || data.error) throw new Error(data.error || "Unknown error");
+    _onSuccess(data, PDF_AGENTS);
   } catch (err) {
     PDF_AGENTS.forEach(a => setCardState(a.id, "error"));
     alert(`Upload error: ${err.message}`);
@@ -592,10 +646,42 @@ async function runPdfPipeline() {
 
   uploadBtn.disabled = false;
   uploadBtn.textContent = "Analyze Paper";
+  resultsPanel.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 
-// ── Event listeners ───────────────────────────────────────────────────────────
+async function runDemo() {
+  const demoBtn = document.getElementById("demo-btn");
+  demoBtn.disabled = true;
+  demoBtn.innerHTML = "<span>⏳</span><span>Loading…</span>";
+
+  switchTab("arxiv");
+  queryInput.value = "Attention Is All You Need";
+  resultsPanel.classList.add("hidden");
+  await animateCards(ARXIV_AGENTS);
+
+  try {
+    const res  = await fetch("/api/demo");
+    const data = await res.json();
+    _onSuccess(data, ARXIV_AGENTS);
+  } catch (err) {
+    ARXIV_AGENTS.forEach(a => setCardState(a.id, "error"));
+    alert(`Demo load error: ${err.message}`);
+  }
+
+  demoBtn.disabled = false;
+  demoBtn.innerHTML = "<span>▶</span><span>Run Demo</span>";
+  resultsPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// L. EVENT LISTENERS
+// ════════════════════════════════════════════════════════════════════════════
+
 runBtn.addEventListener("click", runArxivPipeline);
 queryInput.addEventListener("keydown", e => { if (e.key === "Enter") runArxivPipeline(); });
 uploadBtn.addEventListener("click", runPdfPipeline);
+
+const demoBtn = document.getElementById("demo-btn");
+if (demoBtn) demoBtn.addEventListener("click", runDemo);

@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-
 {% block title %}ResearchPilot AI — Research Intelligence Platform{% endblock %}
 
 {% block content %}
@@ -11,21 +10,20 @@
       Autonomous Research Intelligence
     </h1>
     <p class="text-gray-400 text-lg max-w-2xl mx-auto">
-      Search arXiv or upload your own PDF — seven AI agents analyze the
-      literature and surface critique, hypotheses, and reproducibility scores.
+      Type a topic or upload a PDF — nine AI agents read the papers,
+      spot the gaps, score reproducibility, and explain what it all means
+      in plain English.
     </p>
   </div>
 
   <!-- ── Mode Tabs ──────────────────────────────────────────────────── -->
   <div class="flex gap-2 mb-6">
     <button id="tab-arxiv"
-      class="tab-btn px-5 py-2 rounded-xl text-sm font-semibold transition-colors
-             bg-indigo-600 text-white">
+      class="tab-btn px-5 py-2 rounded-xl text-sm font-semibold transition-colors bg-indigo-600 text-white">
       Search arXiv
     </button>
     <button id="tab-pdf"
-      class="tab-btn px-5 py-2 rounded-xl text-sm font-semibold transition-colors
-             bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white">
+      class="tab-btn px-5 py-2 rounded-xl text-sm font-semibold transition-colors bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white">
       Upload PDF
     </button>
   </div>
@@ -34,17 +32,14 @@
   <div id="panel-arxiv" class="bg-gray-900 rounded-2xl border border-gray-800 p-6 mb-8">
     <label class="block text-sm font-medium text-gray-400 mb-2">Research Topic</label>
     <div class="flex gap-3">
-      <input
-        id="query-input"
-        type="text"
+      <input id="query-input" type="text"
         placeholder='e.g. "graph neural networks for drug discovery"'
         class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-3
                text-white placeholder-gray-600 focus:outline-none
-               focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-      />
+               focus:ring-2 focus:ring-indigo-500 focus:border-transparent"/>
       <button id="run-btn"
-        class="bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700
-               text-white font-semibold px-6 py-3 rounded-xl transition-colors
+        class="bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white
+               font-semibold px-6 py-3 rounded-xl transition-colors
                disabled:opacity-50 disabled:cursor-not-allowed">
         Analyze
       </button>
@@ -54,179 +49,186 @@
   <!-- ── Panel B: PDF Upload ────────────────────────────────────────── -->
   <div id="panel-pdf" class="hidden bg-gray-900 rounded-2xl border border-gray-800 p-6 mb-8">
     <label class="block text-sm font-medium text-gray-400 mb-3">Upload a Research Paper (PDF)</label>
-
-    <!-- Drop zone -->
     <div id="drop-zone"
-      class="border-2 border-dashed border-gray-700 rounded-xl p-10 text-center
-             cursor-pointer hover:border-indigo-500 hover:bg-indigo-950/20
-             transition-colors">
+      class="border-2 border-dashed border-gray-700 rounded-xl p-10 text-center cursor-pointer
+             hover:border-indigo-500 hover:bg-indigo-950/20 transition-colors">
       <div class="text-4xl mb-3">📄</div>
       <p class="text-gray-400 text-sm mb-1">Drag & drop a PDF here, or click to browse</p>
       <p class="text-gray-600 text-xs">Max 15 MB · PDF only</p>
-      <input id="pdf-input" type="file" accept=".pdf" class="hidden" />
+      <input id="pdf-input" type="file" accept=".pdf" class="hidden"/>
     </div>
-
-    <!-- Selected file display -->
-    <div id="file-chosen" class="hidden mt-4 flex items-center gap-3
-         bg-gray-800 rounded-xl px-4 py-3">
+    <div id="file-chosen" class="hidden mt-4 flex items-center gap-3 bg-gray-800 rounded-xl px-4 py-3">
       <span class="text-indigo-400 text-lg">📎</span>
       <span id="file-name" class="text-sm text-gray-200 flex-1 truncate"></span>
       <span id="file-size" class="text-xs text-gray-500"></span>
       <button id="clear-file" class="text-gray-600 hover:text-red-400 text-xs ml-2">✕</button>
     </div>
-
     <button id="upload-btn"
-      class="mt-4 w-full bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700
-             text-white font-semibold py-3 rounded-xl transition-colors
-             disabled:opacity-50 disabled:cursor-not-allowed">
+      class="mt-4 w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold
+             py-3 rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
       Analyze Paper
     </button>
   </div>
 
   <!-- ── Agent Pipeline Status Cards ───────────────────────────────── -->
-  <div id="agent-grid"
-       class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mb-8 hidden">
-    <!-- Injected by main.js -->
-  </div>
+  <div id="agent-grid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-8 hidden"></div>
 
-  <!-- ── Rich Results Panel ─────────────────────────────────────────── -->
+  <!-- ════════════════════════════════════════════════════════════════
+       RESULTS — all sections hidden until a run completes
+  ════════════════════════════════════════════════════════════════ -->
   <div id="results-panel" class="hidden space-y-6">
 
-    <!-- PDF Paper Meta (only shown in PDF mode) -->
-    <div id="paper-meta-card"
-         class="hidden bg-gray-900 rounded-2xl border border-indigo-900 p-5">
-      <h2 class="text-sm font-semibold text-indigo-400 uppercase tracking-widest mb-3">
-        Uploaded Paper
-      </h2>
+    <!-- PDF paper meta (only in pdf mode) -->
+    <div id="paper-meta-card" class="hidden bg-gray-900 rounded-2xl border border-indigo-900 p-5">
+      <h2 class="text-xs font-semibold text-indigo-400 uppercase tracking-widest mb-3">Uploaded Paper</h2>
       <p id="meta-title"   class="text-white font-bold text-lg leading-snug mb-1"></p>
       <p id="meta-authors" class="text-gray-400 text-sm mb-3"></p>
-      <div class="flex flex-wrap gap-3 text-xs text-gray-500">
+      <div class="flex flex-wrap gap-4 text-xs text-gray-500">
         <span id="meta-pages"></span>
         <span id="meta-words"></span>
-        <span id="meta-code"  class="text-green-500"></span>
+        <span id="meta-code"  class="text-green-400"></span>
         <span id="meta-data"  class="text-blue-400"></span>
       </div>
     </div>
 
-    <!-- Synthesis -->
+    <!-- ── 1. Synthesis ──────────────────────────────────────────── -->
     <div class="bg-gray-900 rounded-2xl border border-gray-800 p-6">
-      <h2 class="text-sm font-semibold text-indigo-400 uppercase tracking-widest mb-4">
-        Research Synthesis
+      <h2 class="text-xs font-semibold text-indigo-400 uppercase tracking-widest mb-4">
+        Plain-English Research Summary
       </h2>
       <div id="synthesis-body"
-           class="prose prose-invert prose-sm max-w-none text-gray-300
-                  [&_h2]:text-indigo-300 [&_h2]:font-semibold [&_h2]:text-base [&_h2]:mt-4 [&_h2]:mb-2
-                  [&_h3]:text-indigo-300 [&_h3]:font-semibold [&_h3]:text-sm  [&_h3]:mt-3 [&_h3]:mb-1
-                  [&_ul]:list-disc [&_ul]:pl-5 [&_li]:mb-1
-                  [&_strong]:text-white">
+           class="text-gray-300 text-sm leading-relaxed space-y-3
+                  [&_h2]:text-indigo-300 [&_h2]:font-semibold [&_h2]:text-base [&_h2]:mt-5 [&_h2]:mb-2
+                  [&_strong]:text-white [&_ul]:list-disc [&_ul]:pl-5 [&_li]:mb-1">
       </div>
     </div>
 
-    <!-- Papers + Repro Scores -->
+    <!-- ── 2. Charts ─────────────────────────────────────────────── -->
     <div class="bg-gray-900 rounded-2xl border border-gray-800 p-6">
-      <h2 class="text-sm font-semibold text-indigo-400 uppercase tracking-widest mb-4">
+      <h2 class="text-xs font-semibold text-indigo-400 uppercase tracking-widest mb-1">
+        Visual Analysis
+      </h2>
+      <p class="text-gray-500 text-xs mb-6">Auto-generated from pipeline data — no extra API calls.</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <!-- Repro Score Bar Chart -->
+        <div>
+          <h3 class="text-sm font-semibold text-white mb-3">Reproducibility Scores</h3>
+          <div style="height:220px; position:relative;">
+            <canvas id="chart-repro"></canvas>
+          </div>
+          <p id="chart-repro-analysis" class="text-gray-400 text-xs mt-3 leading-relaxed"></p>
+        </div>
+        <!-- Publication Timeline -->
+        <div>
+          <h3 class="text-sm font-semibold text-white mb-3">Publication Timeline</h3>
+          <div style="height:220px; position:relative;">
+            <canvas id="chart-timeline"></canvas>
+          </div>
+          <p id="chart-timeline-analysis" class="text-gray-400 text-xs mt-3 leading-relaxed"></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 3. Papers + Repro Scores ──────────────────────────────── -->
+    <div class="bg-gray-900 rounded-2xl border border-gray-800 p-6">
+      <h2 class="text-xs font-semibold text-indigo-400 uppercase tracking-widest mb-4">
         Papers &amp; Reproducibility Scores
       </h2>
       <div id="papers-list" class="space-y-3"></div>
     </div>
 
-    <!-- Key Findings -->
+    <!-- ── 4. Tech Profiles ───────────────────────────────────────── -->
     <div class="bg-gray-900 rounded-2xl border border-gray-800 p-6">
-      <h2 class="text-sm font-semibold text-indigo-400 uppercase tracking-widest mb-4">
-        Key Findings
+      <h2 class="text-xs font-semibold text-indigo-400 uppercase tracking-widest mb-1">
+        Models &amp; Architecture Used
+      </h2>
+      <p class="text-gray-500 text-xs mb-5">What each paper actually built — at a glance.</p>
+      <div id="tech-profiles" class="space-y-4"></div>
+    </div>
+
+    <!-- ── 5. Try It Yourself — Code Snippet ─────────────────────── -->
+    <div class="bg-gray-900 rounded-2xl border border-gray-800 p-6">
+      <div class="flex items-center justify-between mb-1">
+        <h2 class="text-xs font-semibold text-indigo-400 uppercase tracking-widest">
+          Try It Yourself
+        </h2>
+        <button id="copy-code-btn"
+          class="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1
+                 rounded-lg border border-gray-700 transition-colors">
+          Copy code
+        </button>
+      </div>
+      <p class="text-gray-500 text-xs mb-4">
+        A runnable Python snippet that shows the core idea from these papers.
+        Copy → paste into a .py file or Jupyter notebook → run.
+      </p>
+      <div class="rounded-xl overflow-hidden border border-gray-700">
+        <pre id="code-block" class="language-python text-sm !m-0 !rounded-none"
+             style="max-height:420px; overflow-y:auto;"><code id="code-content"
+             class="language-python"></code></pre>
+      </div>
+    </div>
+
+    <!-- ── 6. Key Findings ────────────────────────────────────────── -->
+    <div class="bg-gray-900 rounded-2xl border border-gray-800 p-6">
+      <h2 class="text-xs font-semibold text-indigo-400 uppercase tracking-widest mb-4">
+        Key Takeaways
       </h2>
       <ul id="findings-list" class="space-y-2 text-sm text-gray-300"></ul>
     </div>
 
-    <!-- Hypotheses -->
+    <!-- ── 7. Hypotheses ─────────────────────────────────────────── -->
     <div class="bg-gray-900 rounded-2xl border border-gray-800 p-6">
-      <h2 class="text-sm font-semibold text-indigo-400 uppercase tracking-widest mb-4">
-        Testable Hypotheses
+      <h2 class="text-xs font-semibold text-indigo-400 uppercase tracking-widest mb-1">
+        Research Ideas Worth Trying
       </h2>
-      <ol id="hypotheses-list" class="space-y-3 list-decimal list-inside text-sm text-gray-300"></ol>
+      <p class="text-gray-500 text-xs mb-4">
+        Concrete experiments that could move this field forward.
+      </p>
+      <ol id="hypotheses-list" class="space-y-3 text-sm text-gray-300"></ol>
     </div>
 
-    <!-- Errors (only shown if non-empty) -->
-    <div id="errors-card" class="hidden bg-red-950 rounded-2xl border border-red-900 p-5">
-      <h2 class="text-sm font-semibold text-red-400 uppercase tracking-widest mb-3">
-        Pipeline Warnings
+    <!-- ── 8. Methodology Breakdown ─────────────────────────────── -->
+    <div class="bg-gray-900 rounded-2xl border border-gray-800 p-6">
+      <h2 class="text-xs font-semibold text-indigo-400 uppercase tracking-widest mb-1">
+        Methodology Breakdown
       </h2>
+      <p class="text-gray-500 text-xs mb-5">
+        How each paper actually did its research — the approach, the test, and the key steps.
+      </p>
+      <div id="methodology-list" class="space-y-4"></div>
+    </div>
+
+    <!-- ── 9. Assumptions ────────────────────────────────────────── -->
+    <div class="bg-gray-900 rounded-2xl border border-gray-800 p-6">
+      <h2 class="text-xs font-semibold text-indigo-400 uppercase tracking-widest mb-1">
+        Hidden Assumptions
+      </h2>
+      <p class="text-gray-500 text-xs mb-5">
+        Things each paper treated as true without proving — worth knowing before you build on it.
+      </p>
+      <div id="assumptions-list" class="space-y-4"></div>
+    </div>
+
+    <!-- ── 10. Weaknesses ────────────────────────────────────────── -->
+    <div class="bg-gray-900 rounded-2xl border border-gray-800 p-6">
+      <h2 class="text-xs font-semibold text-indigo-400 uppercase tracking-widest mb-1">
+        Known Weaknesses
+      </h2>
+      <p class="text-gray-500 text-xs mb-5">
+        Specific gaps and limits in each paper's approach — what they didn't test or couldn't prove.
+      </p>
+      <div id="weaknesses-list" class="space-y-4"></div>
+    </div>
+
+    <!-- ── Errors (only shown if non-empty) ──────────────────────── -->
+    <div id="errors-card" class="hidden bg-red-950 rounded-2xl border border-red-900 p-5">
+      <h2 class="text-xs font-semibold text-red-400 uppercase tracking-widest mb-3">Pipeline Warnings</h2>
       <ul id="errors-list" class="space-y-1 text-xs text-red-300 list-disc list-inside"></ul>
     </div>
 
-  </div>
-
-  <!-- ── Knowledge Graph ────────────────────────────────────────────── -->
-  <div id="graph-section" class="mt-8 bg-gray-900 rounded-2xl border border-gray-800 p-6 hidden">
-
-    <!-- Header + Legend -->
-    <div class="flex flex-wrap items-start justify-between gap-4 mb-4">
-      <div>
-        <h2 class="text-xl font-semibold text-white mb-1">Knowledge Graph</h2>
-        <p class="text-gray-500 text-xs max-w-lg">
-          Each <strong class="text-white">circle</strong> = one paper (colour = repro score).
-          Each <strong class="text-indigo-300">diamond</strong> = a research topic area.
-          Papers connected to the same topic diamond are <em>related</em>.
-          Click any circle to see its details.
-        </p>
-      </div>
-
-      <!-- Colour legend -->
-      <div class="flex items-center gap-4 text-xs text-gray-400 flex-shrink-0">
-        <span class="flex items-center gap-1.5">
-          <span class="w-3 h-3 rounded-full bg-green-500 inline-block"></span> Score 8–10
-        </span>
-        <span class="flex items-center gap-1.5">
-          <span class="w-3 h-3 rounded-full bg-yellow-500 inline-block"></span> Score 5–7
-        </span>
-        <span class="flex items-center gap-1.5">
-          <span class="w-3 h-3 rounded-full bg-red-500 inline-block"></span> Score 0–4
-        </span>
-        <span class="flex items-center gap-1.5">
-          <span class="w-3 h-3 rounded bg-indigo-500 inline-block rotate-45"></span> Topic
-        </span>
-      </div>
-    </div>
-
-    <!-- Graph canvas -->
-    <div class="relative">
-      <div id="cy"
-           class="w-full rounded-xl bg-gray-950 border border-gray-800"
-           style="height: 420px;"></div>
-
-      <!-- Controls overlay -->
-      <div class="absolute top-3 right-3 flex gap-2">
-        <button id="graph-fit-btn"
-          class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs
-                 px-3 py-1.5 rounded-lg border border-gray-700 transition-colors">
-          Fit
-        </button>
-        <button id="graph-reset-btn"
-          class="bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs
-                 px-3 py-1.5 rounded-lg border border-gray-700 transition-colors">
-          Reset zoom
-        </button>
-      </div>
-    </div>
-
-    <!-- Click-to-inspect tooltip (hidden until a paper node is clicked) -->
-    <div id="node-tooltip"
-         class="hidden mt-4 bg-gray-800 rounded-xl border border-indigo-900 p-4">
-      <p id="tooltip-title"   class="text-white font-semibold text-sm mb-1"></p>
-      <p id="tooltip-authors" class="text-gray-400 text-xs mb-2"></p>
-      <div class="flex items-center gap-4 text-xs">
-        <span>Repro score:
-          <strong id="tooltip-score" class="text-white"></strong>/10
-        </span>
-        <span id="tooltip-date" class="text-gray-500"></span>
-        <a id="tooltip-link" href="#" target="_blank" rel="noopener"
-           class="hidden text-indigo-400 hover:text-indigo-300 underline">
-          Open on arXiv ↗
-        </a>
-      </div>
-    </div>
-
-  </div>
+  </div><!-- /results-panel -->
 
 </div>
 {% endblock %}
