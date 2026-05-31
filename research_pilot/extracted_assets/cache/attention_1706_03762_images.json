@@ -1,0 +1,29 @@
+[
+  {
+    "page": 3,
+    "index": 1,
+    "filename": "page3_img1.png",
+    "image_path": "extracted_images/page3_img1.png",
+    "width": 1520,
+    "height": 2239,
+    "explanation": "Explanation unavailable \u2014 API keys exhausted or unauthorised. Please provide a fresh key to regenerate."
+  },
+  {
+    "page": 4,
+    "index": 1,
+    "filename": "page4_img1.png",
+    "image_path": "extracted_images/page4_img1.png",
+    "width": 445,
+    "height": 884,
+    "explanation": "Explanation unavailable \u2014 API keys exhausted or unauthorised. Please provide a fresh key to regenerate."
+  },
+  {
+    "page": 4,
+    "index": 2,
+    "filename": "page4_img2.png",
+    "image_path": "extracted_images/page4_img2.png",
+    "width": 835,
+    "height": 1282,
+    "explanation": "Explanation unavailable \u2014 API keys exhausted or unauthorised. Please provide a fresh key to regenerate."
+  }
+]

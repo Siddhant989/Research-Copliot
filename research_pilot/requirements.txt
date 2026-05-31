@@ -1,0 +1,16 @@
+streamlit
+langchain
+langchain-google-genai
+langchain-core
+langgraph
+PyMuPDF
+arxiv
+python-dotenv
+requests
+pandas
+ipykernel
+chromadb
+sentence-transformers
+Pillow
+pdfplumber
+opencv-python
