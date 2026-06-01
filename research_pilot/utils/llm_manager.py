@@ -4,6 +4,8 @@ import requests
 from pathlib import Path
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
+from dotenv import load_dotenv
+load_dotenv(override=True)
 
 # Models tried in order — fast first, more powerful as fallback
 MODELS = ["gemini-2.5-flash", "gemini-2.5-pro"]

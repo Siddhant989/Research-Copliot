@@ -1,42 +1,19 @@
-"""
-utils/table_pipeline.py
-Full pipeline for table extraction from a single paper:
-
-  Step 1 — Regex (PyMuPDF) finds pages containing "Table 1", "Table 2" … etc.
-  Step 2 — Gemini Vision renders those pages as images, extracts tables → CSV,
-            converts to Markdown, then generates a plain-English explanation.
-  Step 3 — Only if Step 2 finds ZERO tables → Gemini scans all OTHER pages.
-
-Tables are stored as Markdown strings (not CSV files) so Streamlit can render
-them directly with st.markdown().
-
-API keys are rotated on quota errors via gemini_direct_call, matching the same
-fallback pattern used by the LangGraph agents.
-
-Public entry point:
-    get_or_create_tables(pdf_path, available_keys, exhausted_keys=None, paper_id=None)
-    → (tables, updated_available_keys, updated_exhausted_keys)
-
-    tables: [{page, label, caption, markdown, explanation}]
-
-Cache file:
-    extracted_assets/cache/{paper_id}_tables.json
-
-API key rules:
-  Demo mode : pass [os.getenv("GEMINI_API_KEY_1")]
-  Live mode : pass state["available_api_keys"] + state["exhausted_api_keys"]
-"""
-
 import io
+import os
 import re
-import csv
 import json
 import time
 import base64
+import requests
 from pathlib import Path
 
 import fitz
 from PIL import Image
+from dotenv import load_dotenv
+from langchain_core.prompts import ChatPromptTemplate
+
+
+load_dotenv(override=True)
 
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -44,6 +21,11 @@ from PIL import Image
 CACHE_DIR  = Path("extracted_assets/cache")
 RENDER_DPI = 150    # DPI for rendering PDF pages as images
 CALL_DELAY = 3      # seconds between Gemini calls (free-tier rate limit)
+
+_BASE_URL = (
+    "https://generativelanguage.googleapis.com/v1beta/models"
+    "/{model}:generateContent?key={key}"
+)
 
 # Stale error strings that invalidate a cache entry
 _STALE_MARKERS = [
@@ -56,6 +38,85 @@ def _explanation_is_stale(text: str) -> bool:
     """Return True when an explanation looks like an old error string."""
     low = (text or "").lower()
     return any(m in low for m in _STALE_MARKERS)
+
+
+# ── Gemini Vision helper (extraction only) ────────────────────────────────────
+
+def _gemini_call(parts, temperature=0.1):
+    """
+    Direct Gemini REST call for Vision-based extraction.
+    Tries every GOOGLE_API_KEY_* key × [gemini-2.5-flash, gemini-2.5-pro].
+    Returns the response text on success, or None if all attempts fail.
+    """
+    models = [
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+    ]
+
+    api_list = [
+        value
+        for key, value in os.environ.items()
+        if key.startswith("GOOGLE_API_KEY_")
+    ]
+
+    payload = {
+        "contents": [{"parts": parts}],
+        "generationConfig": {"temperature": temperature},
+    }
+
+    for api_key in api_list:
+        for model_name in models:
+            try:
+                url  = _BASE_URL.format(model=model_name, key=api_key)
+                resp = requests.post(url, json=payload, timeout=60)
+                if resp.status_code == 200:
+                    return (
+                        resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+                    )
+            except Exception:
+                continue
+
+    return None
+
+
+# ── LangChain explanation chain ───────────────────────────────────────────────
+
+_EXPLAIN_PROMPT = ChatPromptTemplate.from_messages([
+    ("system",
+     "You explain research-paper tables in one clear, beginner-friendly paragraph. "
+     "Describe what each column means, what the numbers show, and what conclusion to draw. "
+     "No bullet points. No jargon. No markdown. Plain prose only."),
+    ("human",
+     "Table data (JSON):\n{table_json}\n\n"
+     "Write a single paragraph explaining what this table shows and what the numbers mean."),
+])
+
+
+def _explain_table(table_data: list) -> str:
+    """
+    Generate a plain-English explanation of the table using LangChain
+    + invoke_with_fallback (same key-rotation pattern as all other agents).
+
+    API keys are built from GOOGLE_API_KEY_* env vars at call time.
+    Falls back to "No explanation generated." if all keys fail.
+    """
+    from utils.llm_manager import invoke_with_fallback
+
+    state = {
+        "available_api_keys": [
+            v for k, v in os.environ.items()
+            if k.startswith("GOOGLE_API_KEY_")
+        ],
+        "exhausted_api_keys": [],
+    }
+
+    table_json = json.dumps(table_data[:10], default=str)   # cap rows sent to LLM
+
+    try:
+        text, _ = invoke_with_fallback(state, _EXPLAIN_PROMPT, {"table_json": table_json})
+        return text
+    except Exception:
+        return "No explanation generated."
 
 
 # ── Step 1: Regex scan ────────────────────────────────────────────────────────
@@ -91,7 +152,6 @@ def _find_caption(pdf_path, page_num):
         text = page.get_text("text")
         doc.close()
 
-        # Look for "Table N" followed by optional colon and descriptive text
         match = re.search(
             r'(Table\s+\d+[.:)—–-]?\s*[A-Za-z][^\n]{0,200})',
             text,
@@ -108,10 +168,7 @@ def _find_caption(pdf_path, page_num):
 # ── Step 2: Page rendering + Gemini Vision ────────────────────────────────────
 
 def _render_page(pdf_path, page_index):
-    """
-    Render a PDF page (0-indexed) to a PIL Image at RENDER_DPI.
-    Returns a PIL Image in RGB mode.
-    """
+    """Render a PDF page (0-indexed) to a PIL Image at RENDER_DPI."""
     doc  = fitz.open(pdf_path)
     page = doc[page_index]
     mat  = fitz.Matrix(RENDER_DPI / 72, RENDER_DPI / 72)
@@ -128,142 +185,68 @@ def _image_to_b64(pil_img):
     return base64.b64encode(buf.getvalue()).decode("utf-8")
 
 
-# ── CSV → Markdown conversion ─────────────────────────────────────────────────
-
-def csv_to_markdown(csv_text):
-    """
-    Convert a raw CSV string returned by Gemini into a Markdown table.
-    Escapes pipe characters inside cells so the table renders correctly.
-    Returns an empty string if the CSV is empty or invalid.
-    """
-    reader = csv.reader(io.StringIO(csv_text))
-    rows   = [row for row in reader if any(c.strip() for c in row)]
-
-    if not rows:
-        return ""
-
-    # Fill blank header cells with a placeholder
-    header = [h.strip() if h.strip() else f"Col_{i+1}" for i, h in enumerate(rows[0])]
-
-    lines = []
-    lines.append("| " + " | ".join(header) + " |")
-    lines.append("| " + " | ".join(["---"] * len(header)) + " |")
-
-    for row in rows[1:]:
-        # Pad short rows and trim long rows to match header length
-        padded = row + [""] * max(0, len(header) - len(row))
-        cells  = [str(c).strip().replace("|", "\\|") for c in padded[:len(header)]]
-        lines.append("| " + " | ".join(cells) + " |")
-
-    return "\n".join(lines)
-
-
 # ── Per-page extraction ───────────────────────────────────────────────────────
 
-def extract_table_from_page(pdf_path, page_num, available_keys, exhausted_keys):
-    """
-    Render a page image, send it to Gemini Vision to get a CSV, convert to
-    Markdown, then call Gemini again for a plain-English explanation.
-
-    API keys are rotated on quota errors via gemini_direct_call.
-
-    Returns (markdown_text, explanation, updated_available, updated_exhausted)
-    or (None, None, updated_available, updated_exhausted) if no table found.
-    """
-    from utils.llm_manager import gemini_direct_call, AllKeysExhausted
-
+def extract_table_from_page(pdf_path, page_num):
     img = _render_page(pdf_path, page_num - 1)   # 0-indexed
     b64 = _image_to_b64(img)
 
-    avail = list(available_keys)
-    exh   = list(exhausted_keys)
-
-    # ── Extract CSV from page image ───────────────────
-    csv_parts = [
+    # ── Extract table as JSON ─────────────────────────
+    parts = [
         {"inline_data": {"mime_type": "image/png", "data": b64}},
         {
-            "text": (
-                f"This is page {page_num} of a research paper. "
-                "Find the table on this page and extract ALL its data. "
-                "Return it ONLY as raw CSV (comma-separated, one row per line, "
-                "first row = header). "
-                "No explanation, no markdown fences, no extra text. "
-                "If no table exists on this page, reply exactly: NO_TABLE"
-            )
+            "text": f"""Extract the table from this research paper page.
+
+Return ONLY valid JSON as a list of row objects:
+
+[
+{{"Column1":"Value1","Column2":"Value2"}},
+{{"Column1":"Value3","Column2":"Value4"}}
+]
+
+Rules:
+- Use table headers as keys.
+- Preserve all values exactly.
+- Use "" for empty cells.
+- No markdown, no explanations, no code fences.
+- If no table exists on this page, return [].
+"""
         },
     ]
 
-    try:
-        csv_response, avail, exh = gemini_direct_call(
-            avail, exh, csv_parts, temperature=0.1, max_tokens=1024
-        )
-    except AllKeysExhausted as e:
-        return None, None, e.available, e.exhausted
-
+    raw = _gemini_call(parts, temperature=0.0)
     time.sleep(CALL_DELAY)
 
-    if csv_response.strip().upper() == "NO_TABLE":
-        return None, None, avail, exh
+    if not raw:
+        return None, None
 
-    # Remove any markdown fences Gemini may have added
-    csv_text = re.sub(r"^```[a-z]*\n?", "", csv_response, flags=re.IGNORECASE)
-    csv_text = re.sub(r"\n?```$", "", csv_text).strip()
-
-    if not csv_text:
-        return None, None, avail, exh
-
-    # Convert CSV → Markdown
-    markdown = csv_to_markdown(csv_text)
-    if not markdown:
-        return None, None, avail, exh
-
-    # ── Explain the table ─────────────────────────────
-    explain_parts = [
-        {
-            "text": (
-                "You are analyzing a table from a research paper.\n"
-                "Here is the table in CSV format:\n\n"
-                f"{csv_text}\n\n"
-                "Explain this table concisely for a beginner:\n"
-                "1. What is the table about?\n"
-                "2. What do the rows and columns represent?\n"
-                "3. Key values, trends, or comparisons?\n"
-                "4. Main takeaway?\n"
-                "Keep it under 150 words."
-            )
-        }
-    ]
+    # Strip any markdown code fences Gemini may have added
+    clean = re.sub(r"^```[a-z]*\n?", "", raw, flags=re.IGNORECASE)
+    clean = re.sub(r"\n?```$", "", clean).strip()
 
     try:
-        explanation, avail, exh = gemini_direct_call(
-            avail, exh, explain_parts, temperature=0.1, max_tokens=1024
-        )
-    except AllKeysExhausted as e:
-        explanation = "No explanation generated."
-        avail, exh  = e.available, e.exhausted
+        table_data = json.loads(clean)
+    except Exception:
+        return None, None
 
-    time.sleep(CALL_DELAY)
+    if not table_data or not isinstance(table_data, list):
+        return None, None
 
-    return markdown, explanation, avail, exh
+    # ── Explain via LangChain chain ───────────────────
+    explanation = _explain_table(table_data)
+
+    return table_data, explanation
 
 
 # ── Process a list of pages ───────────────────────────────────────────────────
 
-def _process_pages(pdf_path, pages, label, available_keys, exhausted_keys):
-    """
-    Run Gemini extraction on each page in the list.
-    Returns (results, updated_available_keys, updated_exhausted_keys).
-    """
+def _process_pages(pdf_path, pages, label):
     results = []
-    avail   = list(available_keys)
-    exh     = list(exhausted_keys)
 
     for page_num in pages:
-        markdown, explanation, avail, exh = extract_table_from_page(
-            pdf_path, page_num, avail, exh
-        )
+        table_data, explanation = extract_table_from_page(pdf_path, page_num)
 
-        if markdown is None:
+        if table_data is None:
             continue
 
         caption = _find_caption(pdf_path, page_num)
@@ -271,21 +254,16 @@ def _process_pages(pdf_path, pages, label, available_keys, exhausted_keys):
             "page":        page_num,
             "label":       label,
             "caption":     caption,
-            "markdown":    markdown,
+            "table_data":  table_data,    # list of row-dicts
             "explanation": explanation,
         })
 
-    return results, avail, exh
+    return results
 
 
 # ── Cache helpers ─────────────────────────────────────────────────────────────
 
 def _load_cache(paper_id):
-    """
-    Load cached table results for a paper.
-    Returns a list of table dicts or None if not cached.
-    Automatically invalidates caches that contain stale error explanations.
-    """
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     cache_file = CACHE_DIR / f"{paper_id}_tables.json"
     if not cache_file.exists():
@@ -294,7 +272,6 @@ def _load_cache(paper_id):
         with open(cache_file, "r") as f:
             data = json.load(f)
         if isinstance(data, list):
-            # Invalidate if any explanation contains an old error string
             if any(_explanation_is_stale(item.get("explanation", "")) for item in data):
                 cache_file.unlink(missing_ok=True)
                 return None
@@ -305,7 +282,6 @@ def _load_cache(paper_id):
 
 
 def _save_cache(paper_id, tables):
-    """Save table results to cache JSON. Non-fatal on failure."""
     try:
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
         cache_file = CACHE_DIR / f"{paper_id}_tables.json"
@@ -317,25 +293,7 @@ def _save_cache(paper_id, tables):
 
 # ── Public entry point ────────────────────────────────────────────────────────
 
-def get_or_create_tables(pdf_path, available_keys, exhausted_keys=None, paper_id=None):
-    """
-    Full table pipeline for one paper. Call this from anywhere.
-
-    available_keys / exhausted_keys follow the same convention as
-    invoke_with_fallback: keys are rotated on quota errors and moved to
-    exhausted_keys.
-
-    Returns (tables, updated_available_keys, updated_exhausted_keys).
-
-    Cache hit  → instant return, zero API calls.
-    Cache miss → Step 1 regex scan, Step 2 Gemini Vision on regex pages,
-                 Step 3 (fallback) if Step 2 found nothing, then cache saved.
-
-    paper_id: short stable string used as the cache key.
-              Falls back to the PDF filename stem if not provided.
-    """
-    if exhausted_keys is None:
-        exhausted_keys = []
+def get_or_create_tables(pdf_path, paper_id=None):
 
     if not paper_id:
         paper_id = Path(pdf_path).stem[:40].replace(" ", "_").lower()
@@ -343,7 +301,7 @@ def get_or_create_tables(pdf_path, available_keys, exhausted_keys=None, paper_id
     # Fast path: return from cache
     cached = _load_cache(paper_id)
     if cached is not None:
-        return cached, list(available_keys), list(exhausted_keys)
+        return cached
 
     doc         = fitz.open(pdf_path)
     total_pages = len(doc)
@@ -351,25 +309,21 @@ def get_or_create_tables(pdf_path, available_keys, exhausted_keys=None, paper_id
 
     # ── Step 1: Regex — find pages with "Table N" captions ───────────────────
     regex_pages = find_table_pages_regex(pdf_path)
-
-    avail  = list(available_keys)
-    exh    = list(exhausted_keys)
-    tables = []
+    tables      = []
 
     if regex_pages:
         # ── Step 2: Gemini Vision on regex pages ─────────────────────────────
-        tables, avail, exh = _process_pages(pdf_path, regex_pages, "regex", avail, exh)
+        tables = _process_pages(pdf_path, regex_pages, "regex")
 
         # ── Step 3: Fallback — only if Step 2 found nothing ──────────────────
         if not tables:
             other_pages = [p for p in range(1, total_pages + 1) if p not in regex_pages]
-            tables, avail, exh = _process_pages(pdf_path, other_pages, "fallback", avail, exh)
+            tables = _process_pages(pdf_path, other_pages, "fallback")
     else:
         # Regex found nothing → scan all pages
-        all_pages = list(range(1, total_pages + 1))
-        tables, avail, exh = _process_pages(pdf_path, all_pages, "fallback", avail, exh)
+        tables = _process_pages(pdf_path, list(range(1, total_pages + 1)), "fallback")
 
     # Save to cache so next call is instant
     _save_cache(paper_id, tables)
 
-    return tables, avail, exh
+    return tables

@@ -6,7 +6,7 @@
     "image_path": "extracted_images/page3_img1.png",
     "width": 1520,
     "height": 2239,
-    "explanation": "Explanation unavailable \u2014 API keys exhausted or unauthorised. Please provide a fresh key to regenerate."
+    "explanation": "1.  **Type of figure:** This is an architectural diagram or block diagram.\n2.  **Main subject:** The figure illustrates the Transformer neural network architecture, a model widely used in natural language processing.\n3.  **Key details:** It shows an encoder (left) and a decoder (right), each consisting of N identical layers. Both begin with Input/Output Embeddings combined with Positional Encoding. The encoder layers feature Multi-Head Attention and Feed Forward networks. The decoder layers include Masked Multi-Head Attention (for causality), followed by another Multi-Head Attention layer (attending to encoder output), and Feed Forward networks. All sub-layers are followed by an \"Add & Norm\" step. The decoder output passes through a Linear layer and Softmax to produce output probabilities.\n4.  **Conclusion/Insight:** The diagram conveys how the Transformer processes sequences using self-attention mechanisms to capture dependencies, enabling parallel computation and effective handling of long-range relationships in data, particularly for sequence-to-sequence tasks like machine translation."
   },
   {
     "page": 4,
@@ -15,7 +15,7 @@
     "image_path": "extracted_images/page4_img1.png",
     "width": 445,
     "height": 884,
-    "explanation": "Explanation unavailable \u2014 API keys exhausted or unauthorised. Please provide a fresh key to regenerate."
+    "explanation": "This is a **block diagram** illustrating the architecture of the **scaled dot-product attention mechanism**, a fundamental component in Transformer models.\n\nThe diagram shows the computational flow:\n1.  **Q (Query)** and **K (Key)** matrices undergo a **MatMul** (matrix multiplication).\n2.  The result is then **Scale**d (typically by the square root of the key dimension).\n3.  An optional **Mask**ing step can be applied (e.g., for causal attention).\n4.  A **SoftMax** function normalizes these scores into attention weights.\n5.  Finally, these attention weights are multiplied via **MatMul** with the **V (Value)** matrix to produce the attention output.\n\nThis figure concisely conveys how attention weights are computed from queries and keys, and then used to aggregate information from values, forming the core of self-attention in modern neural networks."
   },
   {
     "page": 4,
@@ -24,6 +24,6 @@
     "image_path": "extracted_images/page4_img2.png",
     "width": 835,
     "height": 1282,
-    "explanation": "Explanation unavailable \u2014 API keys exhausted or unauthorised. Please provide a fresh key to regenerate."
+    "explanation": "Explanation unavailable."
   }
 ]

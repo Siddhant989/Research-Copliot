@@ -1,34 +1,18 @@
-"""
-utils/image_pipeline.py
-Full pipeline for a single paper:
-  1. Extract all meaningful images from the PDF using PyMuPDF + Pillow.
-     Each image is saved as a PNG on disk AND converted to base64 in memory.
-  2. Send that base64 directly to Gemini Vision — no re-reading the file.
-     Uses gemini_direct_call from llm_manager so API keys are rotated on
-     quota errors exactly like the rest of the pipeline.
-  3. Attach the explanation to the image dict.
-  4. Cache the result (path + explanation, no b64) so the same paper is
-     never processed again.
-
-Public entry point:
-    get_or_create_images(pdf_path, available_keys, exhausted_keys=None, paper_id=None)
-    → (images, updated_available_keys, updated_exhausted_keys)
-
-    images: [{page, index, filename, image_path, width, height, explanation}]
-
-API key rules:
-  Demo mode : pass [os.getenv("GEMINI_API_KEY_1")]
-  Live mode : pass state["available_api_keys"] + state["exhausted_api_keys"]
-"""
-
 import io
+import os
 import json
 import time
 import base64
+import requests
 from pathlib import Path
 
 import fitz          # PyMuPDF
 from PIL import Image
+from dotenv import load_dotenv
+
+
+load_dotenv(override=True)
+
 
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -37,10 +21,15 @@ OUTPUT_DIR     = Path("extracted_images")      # where PNGs are saved
 CACHE_DIR      = Path("extracted_assets/cache")
 MIN_IMAGE_SIZE = 100   # skip images smaller than 100×100 px (logos, bullets, etc.)
 
-# Explanation values that indicate a stale / errored cache entry
+_BASE_URL = (
+    "https://generativelanguage.googleapis.com/v1beta/models"
+    "/{model}:generateContent?key={key}"
+)
+
+# Stale error strings that indicate a cache built by old, broken code
 _STALE_MARKERS = [
     "api error", "could not generate", "error 403", "error 400",
-    "error 500", "error 503", "unavailable",
+    "error 500", "error 503",
 ]
 
 
@@ -105,10 +94,10 @@ def extract_images_from_pdf(pdf_path):
                 "page":       page_num + 1,
                 "index":      img_index + 1,
                 "filename":   filename,
-                "image_path": str(save_path),   # consistent with rag/extractor and UI
+                "image_path": str(save_path),
                 "width":      width,
                 "height":     height,
-                "b64_data":   b64_data,          # ready to send to Gemini directly
+                "b64_data":   b64_data,
             })
 
     doc.close()
@@ -117,57 +106,72 @@ def extract_images_from_pdf(pdf_path):
 
 # ── Step 2: Explain with Gemini Vision ───────────────────────────────────────
 
-def explain_image(b64_data, page, available_keys, exhausted_keys):
+def explain_image(b64_data, page):
     """
     Send the already-computed base64 image data to Gemini Vision.
-    Uses b64_data directly — no file re-read, no re-encoding.
 
-    API keys are rotated on quota errors via gemini_direct_call, matching
-    the same fallback pattern used by the LangGraph agents.
+    API keys are read from GOOGLE_API_KEY_* environment variables.
+    Tries every key × every model until one succeeds.
 
-    Returns (explanation_text, updated_available_keys, updated_exhausted_keys).
+    Returns an explanation string.
     """
-    from utils.llm_manager import gemini_direct_call, AllKeysExhausted
-
-    parts = [
-        {
-            "inline_data": {
-                "mime_type": "image/png",
-                "data":      b64_data,   # already base64-encoded from extraction step
-            }
-        },
-        {
-            "text": (
-                "You are analyzing a figure from a research paper. "
-                "Please explain this image clearly and concisely:\n"
-                "1. What type of figure is this? (chart, diagram, graph, table, photo, etc.)\n"
-                "2. What is the main subject or finding shown?\n"
-                "3. What are the key details, labels, or trends visible?\n"
-                "4. What conclusion or insight does this figure convey?\n"
-                "Keep the explanation informative but under 150 words."
-            )
-        },
+    models = [
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
     ]
-    try:
-        text, avail, exh = gemini_direct_call(
-            available_keys, exhausted_keys, parts,
-            temperature=0.2, max_tokens=350,
-        )
-        return text, avail, exh
-    except AllKeysExhausted as e:
-        return (
-            "Explanation unavailable — API keys exhausted or unauthorised. "
-            "Please provide a fresh key to regenerate.",
-            e.available,
-            e.exhausted,
-        )
-    except Exception as e:
-        return (
-            f"Explanation unavailable ({type(e).__name__}). "
-            "The image was extracted successfully.",
-            list(available_keys),
-            list(exhausted_keys),
-        )
+
+    api_list = [
+        value
+        for key, value in os.environ.items()
+        if key.startswith("GOOGLE_API_KEY_")
+    ]
+
+    prompt_text = (
+        "You are analyzing a figure from a research paper. "
+        "Please explain this image clearly and concisely:\n"
+        "1. What type of figure is this? (chart, diagram, graph, table, photo, etc.)\n"
+        "2. What is the main subject or finding shown?\n"
+        "3. What are the key details, labels, or trends visible?\n"
+        "4. What conclusion or insight does this figure convey?\n"
+        "Keep the explanation informative but under 150 words."
+    )
+
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    # The image as base64
+                    {
+                        "inline_data": {
+                            "mime_type": "image/png",
+                            "data": b64_data
+                        }
+                    },
+                    # The text prompt
+                    {
+                        "text": prompt_text
+                    }
+                ]
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0.2,
+        }
+    }
+
+    for api_key in api_list:
+        for model_name in models:
+            try:
+                url  = _BASE_URL.format(model=model_name, key=api_key)
+                resp = requests.post(url, json=payload, timeout=60)
+                if resp.status_code == 200:
+                    return (
+                        resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+                    )
+            except Exception:
+                continue
+
+    return "Explanation unavailable."
 
 
 # ── Step 3: Cache helpers ─────────────────────────────────────────────────────
@@ -186,7 +190,6 @@ def _load_cache(paper_id):
         with open(cache_file, "r") as f:
             data = json.load(f)
         if isinstance(data, list):
-            # Invalidate if any explanation contains an old error string
             if any(_explanation_is_stale(item.get("explanation", "")) for item in data):
                 cache_file.unlink(missing_ok=True)
                 return None
@@ -199,13 +202,11 @@ def _load_cache(paper_id):
 def _save_cache(paper_id, images):
     """
     Save image results to cache.
-    Strips b64_data before saving — the PNG files are on disk and can be
-    re-read if the base64 is ever needed again.
+    Strips b64_data before saving — the PNG files are already on disk.
     """
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     cache_file = CACHE_DIR / f"{paper_id}_images.json"
 
-    # Save only the fields needed for display — skip the large b64_data
     to_save = []
     for img in images:
         to_save.append({
@@ -222,20 +223,16 @@ def _save_cache(paper_id, images):
         with open(cache_file, "w") as f:
             json.dump(to_save, f, indent=2)
     except Exception:
-        pass   # Non-fatal
+        pass
 
 
 # ── Public entry point ────────────────────────────────────────────────────────
 
-def get_or_create_images(pdf_path, available_keys, exhausted_keys=None, paper_id=None):
+def get_or_create_images(pdf_path, paper_id=None):
     """
     Full image pipeline for one paper. Call this from anywhere.
 
-    available_keys / exhausted_keys follow the same convention as
-    invoke_with_fallback: keys are rotated on quota errors and moved to
-    exhausted_keys.
-
-    Returns (images, updated_available_keys, updated_exhausted_keys).
+    Returns images: [{page, index, filename, image_path, width, height, explanation}]
 
     Cache hit  → instant return, no extraction, no API calls.
     Cache miss → extracts images, calls Gemini Vision for each one,
@@ -244,33 +241,25 @@ def get_or_create_images(pdf_path, available_keys, exhausted_keys=None, paper_id
     paper_id: short stable string used as the cache key.
               Falls back to the PDF filename stem if not provided.
     """
-    if exhausted_keys is None:
-        exhausted_keys = []
-
     if not paper_id:
         paper_id = Path(pdf_path).stem[:40].replace(" ", "_").lower()
 
     # Fast path: return from cache
     cached = _load_cache(paper_id)
     if cached is not None:
-        return cached, list(available_keys), list(exhausted_keys)
+        return cached
 
     # Extract all images (saves PNGs, computes b64_data in memory)
     images = extract_images_from_pdf(pdf_path)
 
-    avail = list(available_keys)
-    exh   = list(exhausted_keys)
-
     # Explain each image using the b64_data computed during extraction
     for i, img in enumerate(images):
-        img["explanation"], avail, exh = explain_image(
-            img["b64_data"], img["page"], avail, exh
-        )
-        # Gemini free tier: ~15 requests per minute
+        img["explanation"] = explain_image(img["b64_data"], img["page"])
+        # Free-tier rate limit: ~15 requests per minute
         if i < len(images) - 1:
             time.sleep(4)
 
     # Save to cache (b64_data stripped — PNGs are on disk)
     _save_cache(paper_id, images)
 
-    return images, avail, exh
+    return images

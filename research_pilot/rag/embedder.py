@@ -92,11 +92,13 @@ def reset_and_build(assets: dict) -> chromadb.Collection:
     # ── Tables ────────────────────────────────────────────────────────────────
     for i, tbl in enumerate(assets.get("tables", [])):
         # page field (table_pipeline uses "page", rag/extractor uses "page_number")
-        page_num = str(tbl.get("page_number") or tbl.get("page", ""))
-        caption  = tbl.get("caption") or f"Table on page {page_num}"
-        section  = str(tbl.get("section_name") or tbl.get("label") or "")
-        expl     = tbl.get("explanation") or caption
-        markdown = tbl.get("markdown") or ""
+        page_num   = str(tbl.get("page_number") or tbl.get("page", ""))
+        caption    = tbl.get("caption") or f"Table on page {page_num}"
+        section    = str(tbl.get("section_name") or tbl.get("label") or "")
+        expl       = tbl.get("explanation") or caption
+        # table_data is a list-of-dicts; serialise to JSON string for metadata storage
+        table_data = tbl.get("table_data") or []
+        table_json = json.dumps(table_data, default=str)[:4000]
 
         # Embed caption + explanation for richer retrieval
         embed_text = f"{caption} {expl}".strip()[:1000]
@@ -107,8 +109,8 @@ def reset_and_build(assets: dict) -> chromadb.Collection:
             "page_number":  page_num,
             "section_name": section,
             "caption":      caption[:500],
-            "image_path":   "",   # not applicable for tables
-            "markdown":     markdown[:4000],
+            "image_path":   "",          # not applicable for tables
+            "table_data":   table_json,  # JSON string; parse with json.loads() in UI
         })
         ids.append(f"tbl_{i}")
 

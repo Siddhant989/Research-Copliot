@@ -1,1 +1,436 @@
-[]
+[
+  {
+    "page": 8,
+    "label": "regex",
+    "caption": "Table 2: The Transformer achieves better BLEU scores than previous state-of-the-art models on the",
+    "table_data": [
+      {
+        "Model": "ByteNet [18]",
+        "BLEU EN-DE": "23.75",
+        "BLEU EN-FR": "",
+        "Training Cost (FLOPs) EN-DE": "",
+        "Training Cost (FLOPs) EN-FR": "1.0 \u00b7 10^20"
+      },
+      {
+        "Model": "Deep-Att + PosUnk [39]",
+        "BLEU EN-DE": "",
+        "BLEU EN-FR": "39.2",
+        "Training Cost (FLOPs) EN-DE": "",
+        "Training Cost (FLOPs) EN-FR": "1.4 \u00b7 10^20"
+      },
+      {
+        "Model": "GNMT + RL [38]",
+        "BLEU EN-DE": "24.6",
+        "BLEU EN-FR": "39.92",
+        "Training Cost (FLOPs) EN-DE": "2.3 \u00b7 10^19",
+        "Training Cost (FLOPs) EN-FR": "1.4 \u00b7 10^20"
+      },
+      {
+        "Model": "ConvS2S [9]",
+        "BLEU EN-DE": "25.16",
+        "BLEU EN-FR": "40.46",
+        "Training Cost (FLOPs) EN-DE": "9.6 \u00b7 10^18",
+        "Training Cost (FLOPs) EN-FR": "1.5 \u00b7 10^20"
+      },
+      {
+        "Model": "MoE [32]",
+        "BLEU EN-DE": "26.03",
+        "BLEU EN-FR": "40.56",
+        "Training Cost (FLOPs) EN-DE": "2.0 \u00b7 10^19",
+        "Training Cost (FLOPs) EN-FR": "1.2 \u00b7 10^20"
+      },
+      {
+        "Model": "Deep-Att + PosUnk Ensemble [39]",
+        "BLEU EN-DE": "",
+        "BLEU EN-FR": "40.4",
+        "Training Cost (FLOPs) EN-DE": "",
+        "Training Cost (FLOPs) EN-FR": "8.0 \u00b7 10^20"
+      },
+      {
+        "Model": "GNMT + RL Ensemble [38]",
+        "BLEU EN-DE": "26.30",
+        "BLEU EN-FR": "41.16",
+        "Training Cost (FLOPs) EN-DE": "1.8 \u00b7 10^20",
+        "Training Cost (FLOPs) EN-FR": "1.1 \u00b7 10^21"
+      },
+      {
+        "Model": "ConvS2S Ensemble [9]",
+        "BLEU EN-DE": "26.36",
+        "BLEU EN-FR": "41.29",
+        "Training Cost (FLOPs) EN-DE": "7.7 \u00b7 10^19",
+        "Training Cost (FLOPs) EN-FR": "1.2 \u00b7 10^21"
+      },
+      {
+        "Model": "Transformer (base model)",
+        "BLEU EN-DE": "27.3",
+        "BLEU EN-FR": "38.1",
+        "Training Cost (FLOPs) EN-DE": "3.3 \u00b7 10^18",
+        "Training Cost (FLOPs) EN-FR": ""
+      },
+      {
+        "Model": "Transformer (big)",
+        "BLEU EN-DE": "28.4",
+        "BLEU EN-FR": "41.8",
+        "Training Cost (FLOPs) EN-DE": "2.3 \u00b7 10^19",
+        "Training Cost (FLOPs) EN-FR": ""
+      }
+    ],
+    "explanation": "This table compares different computer programs, or \"models,\" designed for translating languages, specifically from English to German (EN-DE) and English to French (EN-FR). The \"BLEU\" scores measure the quality of the translations, with higher numbers indicating more accurate results that are closer to human-level translation. The \"Training Cost (FLOPs)\" represents the computational effort required to teach the model, where a lower number means it was more efficient to train. Overall, the \"Transformer (big)\" model stands out by achieving the highest translation quality for both English-German and English-French, demonstrating its effectiveness even though its training cost is comparable to or higher than some other models. Notably, the \"Transformer (base model)\" also offers excellent translation quality with a significantly lower training cost for English-German, suggesting a strong balance between performance and efficiency within the Transformer family."
+  },
+  {
+    "page": 9,
+    "label": "regex",
+    "caption": "Table 3: Variations on the Transformer architecture. Unlisted values are identical to those of the base",
+    "table_data": [
+      {
+        "N": "6",
+        "d_model": "512",
+        "d_ff": "2048",
+        "h": "8",
+        "d_k": "64",
+        "d_v": "64",
+        "P_drop": "0.1",
+        "\u03b5_ls": "0.1",
+        "train steps": "100K",
+        "PPL (dev)": "4.92",
+        "BLEU (dev)": "25.8",
+        "params \u00d710^6": "65"
+      },
+      {
+        "N": "",
+        "d_model": "",
+        "d_ff": "",
+        "h": "1",
+        "d_k": "512",
+        "d_v": "512",
+        "P_drop": "",
+        "\u03b5_ls": "",
+        "train steps": "",
+        "PPL (dev)": "5.29",
+        "BLEU (dev)": "24.9",
+        "params \u00d710^6": ""
+      },
+      {
+        "N": "",
+        "d_model": "",
+        "d_ff": "",
+        "h": "4",
+        "d_k": "128",
+        "d_v": "128",
+        "P_drop": "",
+        "\u03b5_ls": "",
+        "train steps": "",
+        "PPL (dev)": "5.00",
+        "BLEU (dev)": "25.5",
+        "params \u00d710^6": ""
+      },
+      {
+        "N": "",
+        "d_model": "",
+        "d_ff": "",
+        "h": "16",
+        "d_k": "32",
+        "d_v": "32",
+        "P_drop": "",
+        "\u03b5_ls": "",
+        "train steps": "",
+        "PPL (dev)": "4.91",
+        "BLEU (dev)": "25.8",
+        "params \u00d710^6": ""
+      },
+      {
+        "N": "",
+        "d_model": "",
+        "d_ff": "",
+        "h": "32",
+        "d_k": "16",
+        "d_v": "16",
+        "P_drop": "",
+        "\u03b5_ls": "",
+        "train steps": "",
+        "PPL (dev)": "5.01",
+        "BLEU (dev)": "25.4",
+        "params \u00d710^6": ""
+      },
+      {
+        "N": "",
+        "d_model": "",
+        "d_ff": "",
+        "h": "",
+        "d_k": "16",
+        "d_v": "",
+        "P_drop": "",
+        "\u03b5_ls": "",
+        "train steps": "",
+        "PPL (dev)": "5.16",
+        "BLEU (dev)": "25.1",
+        "params \u00d710^6": "58"
+      },
+      {
+        "N": "",
+        "d_model": "",
+        "d_ff": "",
+        "h": "",
+        "d_k": "32",
+        "d_v": "",
+        "P_drop": "",
+        "\u03b5_ls": "",
+        "train steps": "",
+        "PPL (dev)": "5.01",
+        "BLEU (dev)": "25.4",
+        "params \u00d710^6": "60"
+      },
+      {
+        "N": "2",
+        "d_model": "",
+        "d_ff": "",
+        "h": "",
+        "d_k": "",
+        "d_v": "",
+        "P_drop": "",
+        "\u03b5_ls": "",
+        "train steps": "",
+        "PPL (dev)": "6.11",
+        "BLEU (dev)": "23.7",
+        "params \u00d710^6": "36"
+      },
+      {
+        "N": "4",
+        "d_model": "",
+        "d_ff": "",
+        "h": "",
+        "d_k": "",
+        "d_v": "",
+        "P_drop": "",
+        "\u03b5_ls": "",
+        "train steps": "",
+        "PPL (dev)": "5.19",
+        "BLEU (dev)": "25.3",
+        "params \u00d710^6": "50"
+      },
+      {
+        "N": "8",
+        "d_model": "",
+        "d_ff": "",
+        "h": "",
+        "d_k": "",
+        "d_v": "",
+        "P_drop": "",
+        "\u03b5_ls": "",
+        "train steps": "",
+        "PPL (dev)": "4.88",
+        "BLEU (dev)": "25.5",
+        "params \u00d710^6": "80"
+      },
+      {
+        "N": "",
+        "d_model": "256",
+        "d_ff": "",
+        "h": "",
+        "d_k": "32",
+        "d_v": "32",
+        "P_drop": "",
+        "\u03b5_ls": "",
+        "train steps": "",
+        "PPL (dev)": "5.75",
+        "BLEU (dev)": "24.5",
+        "params \u00d710^6": "28"
+      },
+      {
+        "N": "",
+        "d_model": "1024",
+        "d_ff": "",
+        "h": "",
+        "d_k": "128",
+        "d_v": "128",
+        "P_drop": "",
+        "\u03b5_ls": "",
+        "train steps": "",
+        "PPL (dev)": "4.66",
+        "BLEU (dev)": "26.0",
+        "params \u00d710^6": "168"
+      },
+      {
+        "N": "",
+        "d_model": "",
+        "d_ff": "1024",
+        "h": "",
+        "d_k": "",
+        "d_v": "",
+        "P_drop": "",
+        "\u03b5_ls": "",
+        "train steps": "",
+        "PPL (dev)": "5.12",
+        "BLEU (dev)": "25.4",
+        "params \u00d710^6": "53"
+      },
+      {
+        "N": "",
+        "d_model": "",
+        "d_ff": "4096",
+        "h": "",
+        "d_k": "",
+        "d_v": "",
+        "P_drop": "",
+        "\u03b5_ls": "",
+        "train steps": "",
+        "PPL (dev)": "4.75",
+        "BLEU (dev)": "26.2",
+        "params \u00d710^6": "90"
+      },
+      {
+        "N": "",
+        "d_model": "",
+        "d_ff": "",
+        "h": "",
+        "d_k": "",
+        "d_v": "",
+        "P_drop": "0.0",
+        "\u03b5_ls": "",
+        "train steps": "",
+        "PPL (dev)": "5.77",
+        "BLEU (dev)": "24.6",
+        "params \u00d710^6": ""
+      },
+      {
+        "N": "",
+        "d_model": "",
+        "d_ff": "",
+        "h": "",
+        "d_k": "",
+        "d_v": "",
+        "P_drop": "0.2",
+        "\u03b5_ls": "",
+        "train steps": "",
+        "PPL (dev)": "4.95",
+        "BLEU (dev)": "25.5",
+        "params \u00d710^6": ""
+      },
+      {
+        "N": "",
+        "d_model": "",
+        "d_ff": "",
+        "h": "",
+        "d_k": "",
+        "d_v": "",
+        "P_drop": "",
+        "\u03b5_ls": "0.0",
+        "train steps": "",
+        "PPL (dev)": "4.67",
+        "BLEU (dev)": "25.3",
+        "params \u00d710^6": ""
+      },
+      {
+        "N": "",
+        "d_model": "",
+        "d_ff": "",
+        "h": "",
+        "d_k": "",
+        "d_v": "",
+        "P_drop": "",
+        "\u03b5_ls": "0.2",
+        "train steps": "",
+        "PPL (dev)": "5.47",
+        "BLEU (dev)": "25.7",
+        "params \u00d710^6": ""
+      },
+      {
+        "N": "",
+        "d_model": "",
+        "d_ff": "positional embedding instead of sinusoids",
+        "h": "",
+        "d_k": "",
+        "d_v": "",
+        "P_drop": "",
+        "\u03b5_ls": "",
+        "train steps": "",
+        "PPL (dev)": "4.92",
+        "BLEU (dev)": "25.7",
+        "params \u00d710^6": ""
+      },
+      {
+        "N": "6",
+        "d_model": "1024",
+        "d_ff": "4096",
+        "h": "16",
+        "d_k": "",
+        "d_v": "",
+        "P_drop": "0.3",
+        "\u03b5_ls": "",
+        "train steps": "300K",
+        "PPL (dev)": "4.33",
+        "BLEU (dev)": "26.4",
+        "params \u00d710^6": "213"
+      }
+    ],
+    "explanation": "This table explores how different internal design choices for a machine translation model affect its performance. Columns like 'N' (number of layers), 'h' (number of attention heads, which are like different perspectives the model uses to understand text), and 'd_k' (a dimension related to how the model weighs information) represent specific architectural settings being tested. 'PPL (dev)' (perplexity) measures how surprised the model is by new text, with lower numbers indicating better understanding, while 'BLEU (dev)' (BLEU score) measures the quality of its translations, with higher numbers meaning better results. 'params \u00d710^6' shows the model's size in millions of adjustable parts. Each row presents a different configuration; for instance, the first row shows a baseline model with 8 attention heads achieving a perplexity of 4.92 and a BLEU score of 25.8. Subsequent rows then systematically change one of these settings, such as trying different numbers of attention heads (h=1, 4, 16, 32) or varying the number of layers (N=2, 4, 8), to observe how these modifications impact the model's translation quality, its ability to predict text, and its overall size. The main takeaway is that carefully adjusting these internal settings significantly influences how effectively the model performs its task, with certain configurations, like using 8 or 16 attention heads or 8 layers, generally leading to better translation quality and lower perplexity."
+  },
+  {
+    "page": 10,
+    "label": "regex",
+    "caption": "Table 4: The Transformer generalizes well to English constituency parsing (Results are on Section 23",
+    "table_data": [
+      {
+        "Parser": "Vinayls & Kaiser et al. (2014) [37]",
+        "Training": "WSJ only, discriminative",
+        "WSJ 23 F1": "88.3"
+      },
+      {
+        "Parser": "Petrov et al. (2006) [29]",
+        "Training": "WSJ only, discriminative",
+        "WSJ 23 F1": "90.4"
+      },
+      {
+        "Parser": "Zhu et al. (2013) [40]",
+        "Training": "WSJ only, discriminative",
+        "WSJ 23 F1": "90.4"
+      },
+      {
+        "Parser": "Dyer et al. (2016) [8]",
+        "Training": "WSJ only, discriminative",
+        "WSJ 23 F1": "91.7"
+      },
+      {
+        "Parser": "Transformer (4 layers)",
+        "Training": "WSJ only, discriminative",
+        "WSJ 23 F1": "91.3"
+      },
+      {
+        "Parser": "Zhu et al. (2013) [40]",
+        "Training": "semi-supervised",
+        "WSJ 23 F1": "91.3"
+      },
+      {
+        "Parser": "Huang & Harper (2009) [14]",
+        "Training": "semi-supervised",
+        "WSJ 23 F1": "91.3"
+      },
+      {
+        "Parser": "McClosky et al. (2006) [26]",
+        "Training": "semi-supervised",
+        "WSJ 23 F1": "92.1"
+      },
+      {
+        "Parser": "Vinayls & Kaiser et al. (2014) [37]",
+        "Training": "semi-supervised",
+        "WSJ 23 F1": "92.1"
+      },
+      {
+        "Parser": "Transformer (4 layers)",
+        "Training": "semi-supervised",
+        "WSJ 23 F1": "92.7"
+      },
+      {
+        "Parser": "Luong et al. (2015) [23]",
+        "Training": "multi-task",
+        "WSJ 23 F1": "93.0"
+      },
+      {
+        "Parser": "Dyer et al. (2016) [8]",
+        "Training": "generative",
+        "WSJ 23 F1": "93.3"
+      }
+    ],
+    "explanation": "This table compares different computer programs, called parsers, that analyze sentence structure, showing how well they perform. The first column lists the name of each parser, often named after the researchers who developed them or the type of technology used, like \"Transformer.\" The second column, \"Training,\" explains how each parser was taught: \"WSJ only, discriminative\" means it learned from a specific collection of newspaper text (the Wall Street Journal) using a focused learning approach, while \"semi-supervised\" means it learned from that same newspaper text but also used a larger amount of general text without direct answers to improve its understanding. The \"WSJ 23 F1\" column shows a performance score, where higher numbers indicate that the parser was more accurate at correctly identifying the grammatical structure of sentences on a specific test from the Wall Street Journal. Looking at these scores, we can see that parsers generally achieve better accuracy when they are trained using the \"semi-supervised\" method, with the \"Transformer (4 layers)\" parser achieving the highest score of 92.7, suggesting that learning from a broader range of text helps these programs understand language more effectively."
+  }
+]

@@ -2,6 +2,7 @@ import os
 import json
 import time
 import shutil
+import pandas as pd
 import streamlit as st
 from pathlib import Path
 from demo.attention_demo import ATTENTION_DEMO
@@ -457,46 +458,20 @@ def _ensure_rag_ready(state: dict) -> bool:
     with st.spinner("Extracting and explaining figures and tables from PDF…"):
         from utils.figure_explainer import get_or_create_assets
         from rag.embedder           import reset_and_build
-        from utils.llm_manager      import AllKeysExhausted
-
-        # Pass the full key lists so quota-exhausted keys rotate automatically
-        available_keys = list(state.get("available_api_keys") or [])
-        exhausted_keys = list(state.get("exhausted_api_keys") or [])
-
-        if not available_keys:
-            # Fallback to plain env-var key when no pipeline state key exists
-            key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY") or ""
-            available_keys = [key] if key else []
 
         # Use arxiv_id as cache key when available
         arxiv_id = (state.get("metadata") or {}).get("arxiv_id", "")
         paper_id = arxiv_id if arxiv_id else None
 
         try:
-            assets, avail, exh = get_or_create_assets(
-                pdf_path, available_keys, exhausted_keys, paper_id=paper_id
-            )
-        except AllKeysExhausted as e:
-            st.error(
-                "🔑 All API keys exhausted during figure/table extraction. "
-                "Please provide a fresh key to continue."
-            )
-            # Write back exhausted key state so the resume dialog can appear
-            if st.session_state.result and not st.session_state.demo_mode:
-                st.session_state.result["available_api_keys"] = e.available
-                st.session_state.result["exhausted_api_keys"] = e.exhausted
-                st.session_state.pipeline_paused = True
-                st.session_state.paused_state    = st.session_state.result
+            assets = get_or_create_assets(pdf_path, paper_id=paper_id)
+        except Exception as e:
+            st.error(f"Could not extract figures and tables: {e}")
             return False
 
         reset_and_build(assets)
         st.session_state.rag_assets = assets
         st.session_state.rag_ready  = True
-
-        # Propagate updated key lists back to the live-pipeline state
-        if st.session_state.result and not st.session_state.demo_mode:
-            st.session_state.result["available_api_keys"] = avail
-            st.session_state.result["exhausted_api_keys"] = exh
 
     return True
 
@@ -548,17 +523,21 @@ def render_figures_tables(state: dict) -> None:
     if tables:
         st.markdown("#### Tables")
         for tbl in tables:
-            caption  = tbl.get("caption",    "")
-            page     = tbl.get("page_number") or tbl.get("page", "?")
-            section  = tbl.get("section_name") or tbl.get("label", "")
-            markdown = tbl.get("markdown",   "")
-            expl     = tbl.get("explanation","")
+            caption    = tbl.get("caption",    "")
+            page       = tbl.get("page_number") or tbl.get("page", "?")
+            section    = tbl.get("section_name") or tbl.get("label", "")
+            table_data = tbl.get("table_data",  [])
+            expl       = tbl.get("explanation", "")
 
             st.markdown(f"**{caption}**")
             st.caption(f"Page {page} · {section}")
 
-            if markdown:
-                st.markdown(markdown)
+            if table_data:
+                try:
+                    df = pd.DataFrame(table_data)
+                    st.dataframe(df, use_container_width=True)
+                except Exception:
+                    pass
 
             if expl:
                 st.markdown("**AI Explanation:**")
@@ -649,14 +628,18 @@ def render_ask_paper(state: dict) -> None:
                 st.caption(f"Page {page} · {section}")
 
         for tc in tbl_chunks[:2]:
-            meta     = tc["metadata"]
-            caption  = meta.get("caption",     "")
-            page     = meta.get("page_number", "?")
-            section  = meta.get("section_name","")
-            markdown = meta.get("markdown",    "")
+            meta       = tc["metadata"]
+            caption    = meta.get("caption",    "")
+            page       = meta.get("page_number","?")
+            section    = meta.get("section_name","")
+            table_json = meta.get("table_data", "[]")
             st.caption(f"{caption} · Page {page} · {section}")
-            if markdown:
-                st.markdown(markdown)
+            try:
+                df = pd.DataFrame(json.loads(table_json))
+                if not df.empty:
+                    st.dataframe(df, use_container_width=True)
+            except Exception:
+                pass
 
         if chunks:
             with st.expander("View source evidence", expanded=False):
@@ -826,16 +809,8 @@ def main() -> None:
                         shutil.copy2(temp_pdf, str(persistent_pdf))
 
                         st.write("🔍 Extracting and explaining figures with AI...")
-                        _demo_key = (
-                            os.getenv("GEMINI_API_KEY_1")
-                            or os.getenv("GOOGLE_API_KEY_1")
-                            or ""
-                        )
-                        # Wrap in a list so gemini_direct_call can rotate if needed
-                        assets, _, _ = get_or_create_assets(
+                        assets = get_or_create_assets(
                             str(persistent_pdf),
-                            [_demo_key] if _demo_key else [],
-                            [],
                             paper_id=demo_paper_id,
                         )
                         reset_and_build(assets)
